@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mdfind -name \"AgentOS\")",
+      "Bash(xcodebuild -version)",
+      "Bash(xcrun simctl *)",
+      "Bash(xcodebuild -project BerryCode.xcodeproj -scheme BerryCode -destination 'generic/platform=iOS Simulator' build)",
+      "Bash(xcodebuild -project BerryCode.xcodeproj -scheme BerryCode -destination 'id=DFBE6B4A-E464-4400-839B-BA1F300DB619' build)",
+      "Bash(xcodebuild -project CodeBerry.xcodeproj -scheme CodeBerry -destination 'id=DFBE6B4A-E464-4400-839B-BA1F300DB619' build)",
+      "Bash(python3 -)",
+      "Bash(swift build *)",
+      "Bash(cp AgentOSApp/CompanionServerController.swift AgentOS/AgentOS/)",
+      "Bash(cp AgentOSApp/AgentOSApp.swift AgentOS/AgentOS/)",
+      "Bash(cp AgentOSApp/SettingsView.swift AgentOS/AgentOS/)",
+      "Bash(xcodebuild -project AgentOS.xcodeproj -scheme AgentOS build)",
+      "Bash(pkill -f companion-demo)",
+      "Bash(gh pr create --base main --head companion-handshake --title 'Companion link: Bonjour + peer-to-peer handshake between CodeBerry \\(iOS\\) and the Mac' --body ' *)",
+      "Bash(xcodebuild -project CodeBerry.xcodeproj -scheme CodeBerry -destination 'generic/platform=iOS Simulator' build)"
+    ]
+  }
+}
