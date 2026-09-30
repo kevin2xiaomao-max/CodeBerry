@@ -33,13 +33,12 @@ A realistic page structure (not a flattened sample):
 - `.ultraThinMaterial` background
 - ternary colors, `if` in builders, `@State` assignment in actions
 
-## Pass criteria
+## Acceptance gate
 
-- None of these warnings appear:
-  `Unknown identifier 'header'`, `'revenueHero'`, `'quickActions'`,
-  `'contactsRail'`, `'metricPair'`, `'weekRail'`, `'floatingTabBar'`
-- Rounded backgrounds, strokes, the green hero, buttons and the floating
-  tab bar render.
-- Tapping a tab button visibly switches `selectedTab`.
+`XiaoZhangGui_CodeBerry_V36Preview.swift` is the **final regression gate**:
+a byte-for-byte copy of the original file that failed on 1.0 with seven
+`Unknown identifier` warnings. **Do not simplify or rewrite it** — it must
+run as-is, with zero `Unknown identifier` warnings.
 
-Re-run this fixture after any Preview engine change to catch regressions.
+`V36CodeBerryPreview.swift` is a second, hand-built fixture covering the
+same engine surface (kept for readability); it is not the gate.

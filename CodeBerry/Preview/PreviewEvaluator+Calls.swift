@@ -27,9 +27,23 @@ extension PreviewEvaluator {
                 try applyModifier(named: name, call: call, args: args, to: &node, env: env)
                 return .view(node)
             }
-            if case .color(let color) = baseValue, name == "opacity",
-               let amount = try numberArg(args.first?.expr, env: env) {
-                return .color(color.opacity(amount))
+            if name == "opacity", let amount = try numberArg(args.first?.expr, env: env) {
+                switch baseValue {
+                case .color(let color):
+                    return .color(color.opacity(amount))
+                case .member(let m):
+                    // Bare-member color chain like `.white.opacity(0.75)`.
+                    if let color = Self.colorTable[m] {
+                        return .color(color.opacity(amount))
+                    }
+                default:
+                    break
+                }
+            }
+            if case .color(let color) = baseValue, Self.cosmeticModifiers.contains(name) {
+                // e.g. `page.ignoresSafeArea()` on a Color value — drop the
+                // modifier silently and keep the color so it still renders.
+                return .color(color)
             }
             if case .string(let string) = baseValue {
                 switch name {
@@ -444,6 +458,9 @@ extension PreviewEvaluator {
         if let member = memberName(expr) { return Self.colorTable[member] }
         let value = try eval(expr, env: env)
         if case .color(let color) = value { return color }
+        // Ternaries and member chains can surface a bare `.white`-style
+        // member instead of a resolved color.
+        if case .member(let m) = value { return Self.colorTable[m] }
         return nil
     }
 
