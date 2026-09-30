@@ -224,8 +224,8 @@ struct PreviewNodeView: View {
                 }
                 if minW != nil || minH != nil || maxW != nil || maxH != nil {
                     v = AnyView(v.frame(minWidth: minW.map { CGFloat($0) },
-                                        minHeight: minH.map { CGFloat($0) },
                                         maxWidth: maxW.map { CGFloat($0) },
+                                        minHeight: minH.map { CGFloat($0) },
                                         maxHeight: maxH.map { CGFloat($0) },
                                         alignment: a))
                 }
