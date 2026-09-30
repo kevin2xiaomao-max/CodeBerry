@@ -1,6 +1,5 @@
 import Foundation
 import Observation
-import AgentKit
 
 /// One entry in the file navigator tree. `children == nil` means leaf.
 struct FileNode: Identifiable, Hashable {
@@ -22,13 +21,13 @@ struct ProjectInfo: Identifiable {
     var id: String { name }
 }
 
-/// The on-device workspace: the same sandboxed folder the agent's file tools
-/// operate on. Owns the navigator tree, open tabs, and the editor buffer.
+/// The on-device workspace: the app's sandboxed Documents folder.
+/// Owns the navigator tree, open tabs, and the editor buffer.
 @Observable
 @MainActor
 final class WorkspaceStore {
     let rootURL: URL
-    private let workspace: Workspace
+    private let workspace: LiteWorkspace
 
     private(set) var projects: [ProjectInfo] = []
     /// Folder name of the open project; nil shows the Projects home screen.
@@ -53,7 +52,7 @@ final class WorkspaceStore {
 
     init(rootURL: URL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]) {
         self.rootURL = rootURL
-        self.workspace = Workspace(root: rootURL)
+        self.workspace = LiteWorkspace(root: rootURL)
         refresh()
         if projects.isEmpty { bootstrapWelcomeProject() }
         // Restore the last session: project first, then the open file.
@@ -81,7 +80,7 @@ final class WorkspaceStore {
             if isDirectory(current), let url = try? workspace.resolve(current) {
                 tree = nodes(in: url, relativePath: current)
             } else {
-                // The project vanished (agent or Files app deleted it).
+                // The project vanished (deleted via the Files app).
                 currentProject = nil
                 tree = []
             }
@@ -124,14 +123,15 @@ final class WorkspaceStore {
         UserDefaults.standard.removeObject(forKey: Self.lastProjectKey)
     }
 
-    /// Creates a project and navigates into it. `scaffold` builds a full,
-    /// ready-to-build iOS app via AgentKit's project template (same one the
-    /// agent's create_xcode_project tool uses); otherwise just a folder.
+    /// Creates a project and navigates into it. `scaffold` creates the
+    /// project folder with a starter SwiftUI file; otherwise just a folder.
+    /// (Lite build: the full .xcodeproj template lives in AgentKit, which
+    /// is not part of this build.)
     func createProject(named rawName: String, scaffold: Bool) async {
         let trimmed = rawName.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
         if scaffold {
-            // Module-safe name, matching the tool's own sanitizing.
+            // Module-safe name.
             var name = trimmed.filter { $0.isLetter || $0.isNumber }
             if let first = name.first, first.isNumber { name = "App" + name }
             guard !name.isEmpty else {
@@ -139,12 +139,14 @@ final class WorkspaceStore {
                 return
             }
             do {
-                _ = try await CreateXcodeProjectTool(workspace: workspace)
-                    .execute(.object(["name": .string(name)]))
+                try FileManager.default.createDirectory(at: workspace.resolve(name),
+                                                        withIntermediateDirectories: true)
+                try workspace.write("\(name)/ContentView.swift",
+                                    content: Self.template(forFileNamed: "ContentView.swift"))
                 refresh()
                 openProject(name)
             } catch {
-                lastError = error.localizedDescription
+                lastError = "Couldn't create project: \(error.localizedDescription)"
             }
         } else {
             guard !trimmed.contains("/") else {
@@ -333,10 +335,10 @@ final class WorkspaceStore {
         }
     }
 
-    // MARK: - Agent integration
+    // MARK: - External changes
 
-    /// Called after the agent runs a tool: re-scan the tree and, if the open
-    /// file changed on disk underneath a clean editor, reload it.
+    /// Re-scan the tree and, if the open file changed on disk underneath a
+    /// clean editor (e.g. via the Files app), reload it.
     func handleAgentMutation() {
         refresh()
         guard let path = openFilePath else { return }
@@ -386,7 +388,7 @@ final class WorkspaceStore {
                             .foregroundStyle(.orange)
                         Text("Hello, CodeBerry!")
                             .font(.title.bold())
-                        Text("Edit this file, or open the agent chat and ask it to build something.")
+                        Text("Edit this file, or create a new file to keep building.")
                             .multilineTextAlignment(.center)
                             .foregroundStyle(.secondary)
                     }

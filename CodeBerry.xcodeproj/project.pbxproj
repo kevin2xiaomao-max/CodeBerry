@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		BC0000000000000000000010 /* AgentKit in Frameworks */ = {isa = PBXBuildFile; productRef = BC0000000000000000000011 /* AgentKit */; };
 		BC0000000000000000000016 /* SwiftSyntax in Frameworks */ = {isa = PBXBuildFile; productRef = BC0000000000000000000014 /* SwiftSyntax */; };
 		BC0000000000000000000017 /* SwiftParser in Frameworks */ = {isa = PBXBuildFile; productRef = BC0000000000000000000015 /* SwiftParser */; };
 		BC0000000000000000000019 /* SwiftOperators in Frameworks */ = {isa = PBXBuildFile; productRef = BC0000000000000000000018 /* SwiftOperators */; };
@@ -30,7 +29,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				BC0000000000000000000010 /* AgentKit in Frameworks */,
 				BC0000000000000000000016 /* SwiftSyntax in Frameworks */,
 				BC0000000000000000000017 /* SwiftParser in Frameworks */,
 				BC0000000000000000000019 /* SwiftOperators in Frameworks */,
@@ -76,7 +74,6 @@
 			);
 			name = CodeBerry;
 			packageProductDependencies = (
-				BC0000000000000000000011 /* AgentKit */,
 				BC0000000000000000000014 /* SwiftSyntax */,
 				BC0000000000000000000015 /* SwiftParser */,
 				BC0000000000000000000018 /* SwiftOperators */,
@@ -109,7 +106,6 @@
 			mainGroup = BC0000000000000000000004;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				BC0000000000000000000012 /* XCLocalSwiftPackageReference "../AgentOS/AgentKit" */,
 				BC0000000000000000000013 /* XCRemoteSwiftPackageReference "swift-syntax" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -279,13 +275,6 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		BC0000000000000000000012 /* XCLocalSwiftPackageReference "../AgentOS/AgentKit" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = ../AgentOS/AgentKit;
-		};
-/* End XCLocalSwiftPackageReference section */
-
 /* Begin XCRemoteSwiftPackageReference section */
 		BC0000000000000000000013 /* XCRemoteSwiftPackageReference "swift-syntax" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -298,10 +287,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		BC0000000000000000000011 /* AgentKit */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = AgentKit;
-		};
 		BC0000000000000000000014 /* SwiftSyntax */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = BC0000000000000000000013 /* XCRemoteSwiftPackageReference "swift-syntax" */;

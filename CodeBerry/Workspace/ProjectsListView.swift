@@ -5,7 +5,6 @@ import SwiftUI
 struct ProjectsListView: View {
     @Bindable var store: WorkspaceStore
     var onShowSettings: () -> Void
-    var onToggleChat: () -> Void
 
     @State private var showNewProject = false
     @State private var newProjectName = ""
@@ -19,7 +18,7 @@ struct ProjectsListView: View {
                 ContentUnavailableView {
                     Label("No Projects", systemImage: "folder.badge.plus")
                 } description: {
-                    Text("Create your first project to start coding, or ask the agent to build one.")
+                    Text("Create your first project to start coding.")
                 } actions: {
                     Button("New Project") {
                         newProjectName = ""
@@ -48,13 +47,6 @@ struct ProjectsListView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    onToggleChat()
-                } label: {
-                    Image(systemName: "sparkles")
-                }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
                     newProjectName = ""
                     showNewProject = true
                 } label: {
@@ -75,7 +67,7 @@ struct ProjectsListView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("App projects include a ready-to-build .xcodeproj scaffold; empty projects are just a folder.")
+            Text("App projects include a starter SwiftUI file; empty projects are just a folder.")
         }
         .alert("Rename Project", isPresented: Binding(get: { renameTarget != nil },
                                                       set: { if !$0 { renameTarget = nil } })) {
