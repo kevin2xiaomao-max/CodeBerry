@@ -101,6 +101,7 @@ struct V36CodeBerryPreview: View {
 
     private var metricPair: some View {
         HStack(spacing: 12) {
+            metric("本月收入", "¥ 18,680", "经营累计")
             metric("今日订单", "36", "单")
             metric("待办事项", "5", "件")
         }
