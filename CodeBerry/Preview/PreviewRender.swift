@@ -16,8 +16,12 @@ enum PreviewModifierOp {
     case italic
     case foreground(Color)
     case background(Color)
+    case backgroundShape(Color, PreviewShapeKind)
+    case backgroundMaterial(Material, PreviewShapeKind?)
+    case overlay([PreviewViewNode])
     case tint(Color)
-    case frame(w: Double?, h: Double?, maxW: Double?, maxH: Double?, alignment: String?)
+    case frame(w: Double?, h: Double?, minW: Double?, minH: Double?,
+               maxW: Double?, maxH: Double?, alignment: String?)
     case cornerRadius(Double)
     case clip(PreviewShapeKind)
     case opacity(Double)
@@ -62,7 +66,7 @@ struct PreviewNodeView: View {
     let runtime: PreviewRuntime
 
     var body: some View {
-        Self.applying(node.modifiers, to: AnyView(base))
+        Self.applying(node.modifiers, to: AnyView(base), runtime: runtime)
     }
 
     @ViewBuilder
@@ -177,7 +181,7 @@ struct PreviewNodeView: View {
 
     // MARK: Modifier application
 
-    static func applying(_ ops: [PreviewModifierOp], to view: AnyView) -> AnyView {
+    static func applying(_ ops: [PreviewModifierOp], to view: AnyView, runtime: PreviewRuntime) -> AnyView {
         var v = view
         for op in ops {
             switch op {
@@ -195,17 +199,33 @@ struct PreviewNodeView: View {
                 v = AnyView(v.foregroundStyle(color))
             case .background(let color):
                 v = AnyView(v.background(color))
+            case .backgroundShape(let color, let kind):
+                v = AnyView(v.background(color, in: shapePath(kind)))
+            case .backgroundMaterial(let material, let kind):
+                if let kind {
+                    v = AnyView(v.background(material, in: shapePath(kind)))
+                } else {
+                    v = AnyView(v.background(material))
+                }
+            case .overlay(let children):
+                v = AnyView(v.overlay {
+                    ForEach(children.indices, id: \.self) { index in
+                        PreviewNodeView(node: children[index], runtime: runtime)
+                    }
+                })
             case .tint(let color):
                 v = AnyView(v.tint(color))
-            case .frame(let w, let h, let maxW, let maxH, let alignmentName):
+            case .frame(let w, let h, let minW, let minH, let maxW, let maxH, let alignmentName):
                 let a = alignment(alignmentName)
                 if w != nil || h != nil {
                     v = AnyView(v.frame(width: w.map { CGFloat($0) },
                                         height: h.map { CGFloat($0) },
                                         alignment: a))
                 }
-                if maxW != nil || maxH != nil {
-                    v = AnyView(v.frame(maxWidth: maxW.map { CGFloat($0) },
+                if minW != nil || minH != nil || maxW != nil || maxH != nil {
+                    v = AnyView(v.frame(minWidth: minW.map { CGFloat($0) },
+                                        minHeight: minH.map { CGFloat($0) },
+                                        maxWidth: maxW.map { CGFloat($0) },
                                         maxHeight: maxH.map { CGFloat($0) },
                                         alignment: a))
                 }

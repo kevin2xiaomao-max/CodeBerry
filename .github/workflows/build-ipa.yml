@@ -6,7 +6,7 @@ name: Build unsigned IPA (codeberry-lite)
 on:
   workflow_dispatch:
   push:
-    branches: [codeberry-lite]
+    branches: [codeberry-lite, codeberry-lite-v2]
 
 jobs:
   build:
@@ -66,20 +66,20 @@ jobs:
             exit 1
           fi
           echo "Found app bundle: $APP_PATH"
-          rm -rf Payload CodeBerry-Lite-unsigned.ipa
+          rm -rf Payload CodeBerry-Lite-2.0-unsigned.ipa
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
           echo "--- Payload contents ---"
           ls -la Payload/CodeBerry.app
-          /usr/bin/zip -qry CodeBerry-Lite-unsigned.ipa Payload
+          /usr/bin/zip -qry CodeBerry-Lite-2.0-unsigned.ipa Payload
           echo "--- IPA ---"
-          ls -lh CodeBerry-Lite-unsigned.ipa
+          ls -lh CodeBerry-Lite-2.0-unsigned.ipa
           echo "--- IPA table of contents (sanity) ---"
-          unzip -l CodeBerry-Lite-unsigned.ipa | grep "Payload/CodeBerry.app" | head -8
+          unzip -l CodeBerry-Lite-2.0-unsigned.ipa | grep "Payload/CodeBerry.app" | head -8
 
       - name: 5. Upload unsigned IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CodeBerry-Lite-unsigned
-          path: CodeBerry-Lite-unsigned.ipa
+          name: CodeBerry-Lite-2.0-unsigned
+          path: CodeBerry-Lite-2.0-unsigned.ipa
           if-no-files-found: error

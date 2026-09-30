@@ -15,11 +15,35 @@ struct PreviewProperty {
     let initialValue: ExprSyntax?
 }
 
+/// A `var xxx: some View { ... }` computed subview inside a View struct.
+struct PreviewComputedView {
+    let name: String
+    let bodyStatements: CodeBlockItemListSyntax?
+}
+
+/// One parameter of a `-> some View` helper function.
+struct PreviewParameter {
+    /// External argument label; nil for `_ name:`.
+    let externalLabel: String?
+    let localName: String
+}
+
+/// A `func xxx(...) -> some View { ... }` helper inside a View struct.
+struct PreviewFunction {
+    let name: String
+    let parameters: [PreviewParameter]
+    let bodyStatements: CodeBlockItemListSyntax?
+}
+
 /// One `struct Foo: View { ... }` found in the source.
 struct PreviewViewStruct {
     let name: String
     let properties: [PreviewProperty]
     let bodyStatements: CodeBlockItemListSyntax?
+    /// Computed subviews (`var xxx: some View`), excluding `body`.
+    var computedViews: [String: PreviewComputedView] = [:]
+    /// Helper functions returning `some View`.
+    var functions: [String: PreviewFunction] = [:]
 }
 
 /// Everything the evaluator needs from one parsed file.
@@ -81,8 +105,16 @@ struct PreviewEngine {
 
         var properties: [PreviewProperty] = []
         var bodyStatements: CodeBlockItemListSyntax?
+        var computedViews: [String: PreviewComputedView] = [:]
+        var functions: [String: PreviewFunction] = [:]
 
         for member in decl.memberBlock.members {
+            if let function = member.decl.as(FunctionDeclSyntax.self) {
+                if let previewFunction = Self.helperFunction(from: function) {
+                    functions[previewFunction.name] = previewFunction
+                }
+                continue
+            }
             guard let variable = member.decl.as(VariableDeclSyntax.self) else { continue }
             let isState = variable.attributes.contains { element in
                 if case .attribute(let attr) = element {
@@ -102,6 +134,9 @@ struct PreviewEngine {
                             bodyStatements = accessor.body?.statements
                         }
                     }
+                } else if binding.typeAnnotation?.type.trimmedDescription.contains("some View") == true,
+                          let statements = Self.getterStatements(binding.accessorBlock) {
+                    computedViews[name] = PreviewComputedView(name: name, bodyStatements: statements)
                 } else if binding.accessorBlock == nil {
                     properties.append(PreviewProperty(name: name,
                                                       isState: isState,
@@ -112,6 +147,37 @@ struct PreviewEngine {
 
         return PreviewViewStruct(name: decl.name.text,
                                  properties: properties,
-                                 bodyStatements: bodyStatements)
+                                 bodyStatements: bodyStatements,
+                                 computedViews: computedViews,
+                                 functions: functions)
+    }
+
+    /// Returns the getter's statements when the accessor block is a plain
+    /// getter (`{ ... }` or accessors containing only `get`), nil otherwise.
+    private static func getterStatements(_ accessorBlock: AccessorBlockSyntax?) -> CodeBlockItemListSyntax? {
+        guard let accessorBlock else { return nil }
+        switch accessorBlock.accessors {
+        case .getter(let statements):
+            return statements
+        case .accessors(let accessors):
+            guard accessors.count == 1,
+                  accessors.first?.accessorSpecifier.text == "get" else { return nil }
+            return accessors.first?.body?.statements
+        }
+    }
+
+    /// Parses `func xxx(...) -> some View { ... }` (optionally `private`).
+    private static func helperFunction(from decl: FunctionDeclSyntax) -> PreviewFunction? {
+        let returnsView = decl.signature.returnClause?.type.trimmedDescription.contains("some View") ?? false
+        guard returnsView else { return nil }
+        let parameters = decl.signature.parameterClause.parameters.map { param in
+            PreviewParameter(
+                externalLabel: param.firstName.text == "_" ? nil : param.firstName.text,
+                localName: param.secondName?.text ?? param.firstName.text
+            )
+        }
+        return PreviewFunction(name: decl.name.text,
+                               parameters: parameters,
+                               bodyStatements: decl.body?.statements)
     }
 }

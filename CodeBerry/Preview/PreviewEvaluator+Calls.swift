@@ -148,12 +148,50 @@ extension PreviewEvaluator {
             return .number(value.doubleValue ?? 0)
 
         default:
+            if let function = doc.views[env.typeName]?.functions[name] {
+                return try invokeFunction(function, args: args, env: env)
+            }
             if let viewStruct = doc.views[name] {
                 return .view(try instantiate(name: name, viewStruct: viewStruct, args: args, env: env))
             }
             warn("'\(name)' isn't supported by the preview yet.")
             return .view(PreviewViewNode(kind: .unsupported(name)))
         }
+    }
+
+    /// Calls a `func xxx(...) -> some View` helper defined in the current view
+    /// struct. Arguments bind to parameters by external label first, then by
+    /// position for `_ name:` (unlabeled) parameters. The child env inherits
+    /// the caller's locals and @State.
+    private func invokeFunction(_ function: PreviewFunction,
+                                args: [(label: String?, expr: ExprSyntax)],
+                                env: Env) throws -> PreviewValue {
+        depth += 1
+        defer { depth -= 1 }
+        guard depth < 40 else {
+            throw PreviewError(message: "View nesting too deep (recursive view?).")
+        }
+        var childEnv = env
+        var consumed = Set<Int>()
+        for param in function.parameters {
+            if let label = param.externalLabel,
+               let index = args.indices.first(where: { args[$0].label == label }) {
+                childEnv.locals[param.localName] = try eval(args[index].expr, env: env)
+                consumed.insert(index)
+            }
+        }
+        var remaining = args.indices.filter { !consumed.contains($0) }
+        for param in function.parameters
+            where param.externalLabel == nil && childEnv.locals[param.localName] == nil {
+            guard !remaining.isEmpty else { break }
+            let index = remaining.removeFirst()
+            childEnv.locals[param.localName] = try eval(args[index].expr, env: env)
+        }
+        guard let statements = function.bodyStatements else { return .void }
+        let children = try viewBuilderChildren(statements, env: childEnv)
+        if children.count == 1 { return .view(children[0]) }
+        if children.isEmpty { return .void }
+        return .view(PreviewViewNode(kind: .group(children)))
     }
 
     private func instantiate(name: String, viewStruct: PreviewViewStruct,
@@ -267,7 +305,8 @@ extension PreviewEvaluator {
         "scrollIndicators", "ignoresSafeArea", "resizable", "scaledToFit",
         "scaledToFill", "aspectRatio", "symbolRenderingMode", "task",
         "accessibilityLabel", "accessibilityHint", "id", "tag", "disabled",
-        "contentShape", "interactiveDismissDisabled", "fontDesign", "kerning"
+        "contentShape", "interactiveDismissDisabled", "fontDesign", "kerning",
+        "minimumScaleFactor"
     ]
 
     private func applyModifier(named name: String, call: FunctionCallExprSyntax,
@@ -304,25 +343,48 @@ extension PreviewEvaluator {
                 node.modifiers.append(.tint(color))
             }
         case "background":
-            if let color = try colorValue(from: args.first(where: { $0.label == nil })?.expr, env: env) {
-                node.modifiers.append(.background(color))
+            let firstExpr = args.first(where: { $0.label == nil })?.expr
+            let inShape = try shapeKind(from: args.first(where: { $0.label == "in" })?.expr, env: env)
+            if let firstExpr, let member = memberName(firstExpr),
+               let material = Self.materialTable[member] {
+                node.modifiers.append(.backgroundMaterial(material, inShape))
+            } else if let color = try colorValue(from: firstExpr, env: env) {
+                if let shape = inShape {
+                    node.modifiers.append(.backgroundShape(color, shape))
+                } else {
+                    node.modifiers.append(.background(color))
+                }
             }
+        case "overlay":
+            var children: [PreviewViewNode] = []
+            if let trailing = call.trailingClosure {
+                children = try viewBuilderChildren(trailing.statements, env: env)
+            } else if let first = args.first?.expr {
+                switch try eval(first, env: env) {
+                case .view(let child): children = [child]
+                case .color(let color): children = [PreviewViewNode(kind: .colorView(color))]
+                default: break
+                }
+            }
+            node.modifiers.append(.overlay(children))
         case "frame":
-            var w: Double?, h: Double?, maxW: Double?, maxH: Double?
+            var w: Double?, h: Double?, minW: Double?, minH: Double?
+            var maxW: Double?, maxH: Double?
             var alignment: String?
             for arg in args {
                 switch arg.label {
                 case "width": w = try numberArg(arg.expr, env: env)
                 case "height": h = try numberArg(arg.expr, env: env)
+                case "minWidth": minW = try numberArg(arg.expr, env: env)
+                case "minHeight": minH = try numberArg(arg.expr, env: env)
                 case "maxWidth": maxW = try numberArg(arg.expr, env: env)
                 case "maxHeight": maxH = try numberArg(arg.expr, env: env)
-                case "minWidth": w = try w ?? numberArg(arg.expr, env: env)
-                case "minHeight": h = try h ?? numberArg(arg.expr, env: env)
                 case "alignment": alignment = memberName(arg.expr)
                 default: break
                 }
             }
-            node.modifiers.append(.frame(w: w, h: h, maxW: maxW, maxH: maxH, alignment: alignment))
+            node.modifiers.append(.frame(w: w, h: h, minW: minW, minH: minH,
+                                         maxW: maxW, maxH: maxH, alignment: alignment))
         case "cornerRadius":
             node.modifiers.append(.cornerRadius(try numberArg(args.first?.expr, env: env) ?? 8))
         case "clipShape":

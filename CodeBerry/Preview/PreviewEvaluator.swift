@@ -85,7 +85,9 @@ final class PreviewEvaluator {
     let runtime: PreviewRuntime
     private(set) var warnings: [String] = []
     private var warningSet: Set<String> = []
-    private var depth = 0
+    /// Recursion guard shared with PreviewEvaluator+Calls (computed views,
+    /// helper functions, struct instantiation).
+    var depth = 0
 
     init(doc: PreviewDocument, runtime: PreviewRuntime) {
         self.doc = doc
@@ -163,6 +165,9 @@ final class PreviewEvaluator {
             case .stmt(let stmt):
                 if let exprStmt = stmt.as(ExpressionStmtSyntax.self) {
                     out += try viewNodes(from: exprStmt.expression, env: env)
+                } else if let returnStmt = stmt.as(ReturnStmtSyntax.self),
+                          let expression = returnStmt.expression {
+                    out += try viewNodes(from: expression, env: env)
                 }
             case .expr(let expr):
                 out += try viewNodes(from: expr, env: env)
@@ -227,7 +232,7 @@ final class PreviewEvaluator {
             return .array(try array.elements.map { try eval($0.expression, env: env) })
         }
         if let reference = expr.as(DeclReferenceExprSyntax.self) {
-            return evalReference(reference.baseName.text, env: env)
+            return try evalReference(reference.baseName.text, env: env)
         }
         if let member = expr.as(MemberAccessExprSyntax.self) {
             return try evalMember(member, env: env)
@@ -259,7 +264,7 @@ final class PreviewEvaluator {
         return .void
     }
 
-    private func evalReference(_ name: String, env: Env) -> PreviewValue {
+    private func evalReference(_ name: String, env: Env) throws -> PreviewValue {
         if name.hasPrefix("$") {
             let property = String(name.dropFirst())
             if let key = env.stateKeys[property] { return .binding(key) }
@@ -268,8 +273,27 @@ final class PreviewEvaluator {
         }
         if let local = env.locals[name] { return local }
         if let key = env.stateKeys[name] { return runtime.value(key) ?? .void }
+        if let computed = doc.views[env.typeName]?.computedViews[name] {
+            return try invokeComputedView(computed, env: env)
+        }
         warn("Unknown identifier '\(name)'.")
         return .void
+    }
+
+    /// Evaluates a `var xxx: some View { ... }` computed subview in the
+    /// current env, so @State and locals stay visible. Depth-guarded against
+    /// mutually recursive computed views.
+    private func invokeComputedView(_ computed: PreviewComputedView, env: Env) throws -> PreviewValue {
+        depth += 1
+        defer { depth -= 1 }
+        guard depth < 40 else {
+            throw PreviewError(message: "View nesting too deep (recursive view?).")
+        }
+        guard let statements = computed.bodyStatements else { return .void }
+        let children = try viewBuilderChildren(statements, env: env)
+        if children.count == 1 { return .view(children[0]) }
+        if children.isEmpty { return .void }
+        return .view(PreviewViewNode(kind: .group(children)))
     }
 
     private func evalMember(_ member: MemberAccessExprSyntax, env: Env) throws -> PreviewValue {
@@ -459,7 +483,15 @@ final class PreviewEvaluator {
         "mint": .mint, "teal": .teal, "cyan": .cyan, "blue": .blue,
         "indigo": .indigo, "purple": .purple, "pink": .pink, "brown": .brown,
         "white": .white, "gray": .gray, "black": .black, "clear": .clear,
-        "primary": .primary, "secondary": .secondary, "accentColor": .accentColor
+        "primary": .primary, "secondary": .secondary, "accentColor": .accentColor,
+        // SwiftUI has no Color.tertiary — approximate it.
+        "tertiary": Color.secondary.opacity(0.55)
+    ]
+
+    static let materialTable: [String: Material] = [
+        "ultraThinMaterial": .ultraThinMaterial,
+        "thinMaterial": .thinMaterial,
+        "regularMaterial": .regularMaterial
     ]
 
     static let fontTable: [String: Font] = [
