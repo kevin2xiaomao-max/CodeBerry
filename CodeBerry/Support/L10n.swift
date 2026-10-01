@@ -202,6 +202,7 @@ enum L10nKey: String, CaseIterable {
     case diagCallUnsupported
     case diagMethodUnsupported
     case diagFactoryUnsupported
+    case diagExternalPackageNotExecuted   // 4.0.2 P1-8: 「%@」属于外部包 %@，预览不执行
     case diagForEachNeedsClosure
     case diagForEachData
     case diagModifierIgnored
@@ -584,6 +585,7 @@ final class L10nService: @unchecked Sendable {
         .diagCallUnsupported: ("此处不支持调用 .%@(…)", "Call '.%@(…)' not supported here."),
         .diagMethodUnsupported: ("暂不支持方法 .%@(…)", "Method '.%@(…)' not supported."),
         .diagFactoryUnsupported: ("“%@”预览暂不支持", "'%@' isn't supported by the preview yet."),
+        .diagExternalPackageNotExecuted: ("“%@”属于外部包 %@，预览不执行", "'%@' is from external package %@ and is not executed in preview."),
         .diagForEachNeedsClosure: ("ForEach 需要范围/数组和尾随闭包", "ForEach needs a range/array and a trailing closure."),
         .diagForEachData: ("ForEach 数据必须是范围或数组字面量", "ForEach data must be a range or array literal."),
         .diagModifierIgnored: ("修饰符 .%@ 暂不支持（已忽略）", "Modifier '.%@' not supported (ignored)."),

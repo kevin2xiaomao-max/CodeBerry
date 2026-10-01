@@ -52,6 +52,9 @@ struct PreviewViewNode {
         case colorView(Color)
         case progress
         case unsupported(String)
+        /// 4.0.2 P1-8: external-package symbol (Charts/MapKit/…) —
+        /// deliberately not executed; the rest of the page still renders.
+        case externalPackage(package: String, symbol: String)
     }
 
     var kind: Kind
@@ -150,6 +153,15 @@ struct PreviewNodeView: View {
             ProgressView()
         case .unsupported(let name):
             Label(name, systemImage: "questionmark.square.dashed")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(6)
+                .background(RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(.secondary.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [4])))
+        case .externalPackage(let package, let symbol):
+            // 4.0.2 P1-8: not a failure — the package is deliberately not
+            // executed. Same dashed treatment, distinct icon + package name.
+            Label("\(symbol) · \(package)", systemImage: "shippingbox")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(6)

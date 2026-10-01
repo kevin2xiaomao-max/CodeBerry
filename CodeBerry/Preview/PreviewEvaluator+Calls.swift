@@ -277,10 +277,41 @@ extension PreviewEvaluator {
                                                             evaluator: self, env: env) {
                 return custom
             }
+            // 4.0.2 P1-8: external packages are never executed. They get an
+            // explicit "not executed" placeholder (not the generic [?]),
+            // and never block the rest of the page. Project-defined views
+            // with the same name already won above, so this can't shadow
+            // user code.
+            if let package = Self.externalPackages[name] {
+                diagnose(.warning, .diagExternalPackageNotExecuted,
+                         params: [name, package], api: name, node: call)
+                return .view(PreviewViewNode(kind: .externalPackage(package: package,
+                                                                   symbol: name)))
+            }
             diagnose(.warning, .diagFactoryUnsupported, params: [name], api: name, node: call)
             return .view(PreviewViewNode(kind: .unsupported(name)))
         }
     }
+
+    // MARK: - 4.0.2 P1-8: external packages
+
+    /// External-package symbols mapped to their package. These are never
+    /// executed — the evaluator renders an explicit placeholder instead.
+    /// (Checked after current-file/index/registry so user-defined views
+    /// with colliding names still win.)
+    private static let externalPackages: [String: String] = [
+        // Charts
+        "Chart": "Charts", "BarMark": "Charts", "LineMark": "Charts",
+        "PointMark": "Charts", "AreaMark": "Charts",
+        "RectangleMark": "Charts", "RuleMark": "Charts",
+        // MapKit
+        "Map": "MapKit", "MapMarker": "MapKit", "MapAnnotation": "MapKit",
+        "MapCircle": "MapKit", "MapPolygon": "MapKit", "MapPolyline": "MapKit",
+        // AVKit
+        "VideoPlayer": "AVKit",
+        // WebKit (common wrapper name)
+        "WebView": "WebKit",
+    ]
 
     /// Calls a `func xxx(...) -> some View` helper defined in the current view
     /// struct. Arguments bind to parameters by external label first, then by
