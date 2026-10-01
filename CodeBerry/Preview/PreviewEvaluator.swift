@@ -180,14 +180,32 @@ final class PreviewEvaluator {
         self.runtime = runtime
     }
 
-    func renderRoot() throws -> [PreviewViewNode] {
+    /// 4.0.3 S8 (P0-F): the root view is always explicit. `targetView`
+    /// threads the user's selection (PreviewCandidate.viewName) end to end:
+    /// candidate → canvas → IncrementalPreview → here.
+    /// `doc.viewOrder.first` is never a silent default: with no target and
+    /// several views this warns and throws instead of guessing wrong.
+    func renderRoot(targetView: String? = nil) throws -> [PreviewViewNode] {
         if let previewBody = doc.previewBody {
             return try viewBuilderChildren(previewBody, env: Env())
         }
-        guard let firstName = doc.viewOrder.first, let first = activeViews[firstName] else {
+        if let target = targetView {
+            guard let view = activeViews[target] else {
+                throw PreviewError(.errComponentNotFound, target)
+            }
+            return [try instantiateStruct(view, args: [], callerEnv: Env())]
+        }
+        let order = doc.viewOrder
+        if order.count == 1, let only = activeViews[order[0]] {
+            // Unambiguous — the file declares exactly one view.
+            return [try instantiateStruct(only, args: [], callerEnv: Env())]
+        }
+        guard !order.isEmpty else {
             throw PreviewError(.errNoPreviewableView)
         }
-        return [try instantiateStruct(first, args: [], callerEnv: Env())]
+        // Multiple views, no selection — never silently pick viewOrder.first.
+        diagnose(.warning, .diagNoTargetView, node: nil)
+        throw PreviewError(.errSelectViewRequired)
     }
 
     /// Structured diagnostic (§十一): severity + localized message + file + line + API.

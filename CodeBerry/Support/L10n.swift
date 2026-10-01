@@ -46,6 +46,7 @@ enum L10nKey: String, CaseIterable {
     case errComponentNotFound  // 找不到组件 %@
     case errPreviewPaused      // 预览已暂停
     case errNoPreviewableView  // 无法预览：请添加遵循 View 的 struct 或 #Preview
+    case errSelectViewRequired  // 4.0.3 S8 (P0-F): 文件中有多个 View，请选择要预览的视图
     case errNoBody             // %@ 没有可预览的 body
     case errRecursionDeep      // 视图嵌套过深（可能是递归视图）
 
@@ -454,6 +455,7 @@ final class L10nService: @unchecked Sendable {
         .errComponentNotFound: ("找不到组件 %@", "Component not found: %@"),
         .errPreviewPaused: ("预览已暂停", "Preview paused"),
         .errNoPreviewableView: ("无法预览：请添加遵循 View 的 struct 或 #Preview", "Nothing to preview — add a struct conforming to View or a #Preview block."),
+        .errSelectViewRequired: ("文件中有多个视图，请选择要预览的一个", "This file declares several views — pick one to preview."),
         .errNoBody: ("%@ 没有可预览的 body", "%@ has no body to preview."),
         .errRecursionDeep: ("视图嵌套过深（可能是递归视图）", "View nesting too deep (recursive view?)."),
         // Workspace errors

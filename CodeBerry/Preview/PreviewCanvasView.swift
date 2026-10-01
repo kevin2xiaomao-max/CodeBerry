@@ -56,6 +56,9 @@ struct PreviewCanvasView: View {
     // MARK: - M3
     @State private var incrementalCache = IncrementalPreview.Cache()
     @State private var mockCenter = MockCenter()
+    // 4.0.3 S8 (P0-F): the user's explicit view selection
+    // (PreviewCandidate.viewName), threaded to the evaluator.
+    @State private var selectedViewName: String?
     @State private var showMockCenter = false
     @State private var showDashboard = false
     @State private var showCandidates = false
@@ -91,6 +94,10 @@ struct PreviewCanvasView: View {
             hasRendered = true
         }
         .onChange(of: runtime.version) {
+            recompute()
+        }
+        // 4.0.3 S8 (P0-F): an explicit selection change re-renders the root.
+        .onChange(of: selectedViewName) { _, _ in
             recompute()
         }
         .sheet(isPresented: $showDiagnostics) {
@@ -481,7 +488,11 @@ struct PreviewCanvasView: View {
                 cache: &incrementalCache,
                 runtime: runtime,
                 projectIndex: hasProjectContext ? projectIndex : nil,
-                mockStore: mockStore)
+                mockStore: mockStore,
+                // 4.0.3 S8 (P0-F): the selection threads end to end; a
+                // stale selection (view not in this file) degrades to nil
+                // rather than rendering the wrong view.
+                targetView: selectedViewName.flatMap { seedDoc.viewOrder.contains($0) ? $0 : nil })
             guard !result.nodes.isEmpty else {
                 throw PreviewError(.errNoPreviewableView)
             }
@@ -730,6 +741,10 @@ extension PreviewCanvasView {
                     analysis: analysis,
                     onSelect: { c in
                         showCandidates = false
+                        // 4.0.3 S8 (P0-F): the candidate's viewName is the
+                        // explicit preview target — set it before opening
+                        // the file so the first recompute already uses it.
+                        selectedViewName = c.viewName
                         if let project = store.currentProject {
                             store.openFile(project + "/" + c.filePath)
                         }

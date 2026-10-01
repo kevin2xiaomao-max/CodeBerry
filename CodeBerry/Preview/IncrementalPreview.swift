@@ -58,12 +58,17 @@ enum IncrementalPreview {
     /// AST identity is unchanged. Returns the rendered nodes, diagnostics,
     /// debug stats, and the evaluator (kept alive by the canvas for
     /// `mockRequirements` / `activeViews`).
+    ///
+    /// 4.0.3 S8 (P0-F): `targetView` is the user's explicit selection
+    /// (PreviewCandidate.viewName), threaded end to end — never
+    /// `viewOrder.first` by default.
     static func evaluate(source: String,
                          fileName: String,
                          cache: inout Cache,
                          runtime: PreviewRuntime,
                          projectIndex: PreviewProjectIndex?,
-                         mockStore: PreviewMockStore?)
+                         mockStore: PreviewMockStore?,
+                         targetView: String? = nil)
         -> (nodes: [PreviewViewNode], diagnostics: [PreviewDiagnostic],
             stats: Stats, evaluator: PreviewEvaluator)
     {
@@ -85,7 +90,7 @@ enum IncrementalPreview {
         evaluator.projectIndex = projectIndex
         evaluator.mockStore = mockStore
 
-        let identity = cacheKey(doc: doc, fileName: fileName)
+        let identity = cacheKey(doc: doc, fileName: fileName, targetView: targetView)
         let diagHash = diagnosticsHash(of: evaluator.diagnostics)
 
         if let hit = cache.entries[identity.key],
@@ -101,7 +106,7 @@ enum IncrementalPreview {
         cache.misses += 1
         let nodes: [PreviewViewNode]
         do {
-            nodes = try evaluator.renderRoot()
+            nodes = try evaluator.renderRoot(targetView: targetView)
         } catch {
             cache.evaluations += 1
             cache.totalNanos += DispatchTime.now().uptimeNanoseconds - started
@@ -119,12 +124,21 @@ enum IncrementalPreview {
     // MARK: - Identity
 
     /// (cache key, body hash) for the document's root view.
-    static func cacheKey(doc: PreviewDocument, fileName: String) -> (key: String, bodyHash: Int) {
+    ///
+    /// 4.0.3 S8 (P0-F): the key records the explicit target — never
+    /// `viewOrder.first` by default. An ambiguous (multi-view, no target)
+    /// document keys as "#Ambiguous" so a later explicit selection can't
+    /// hit a stale entry.
+    static func cacheKey(doc: PreviewDocument, fileName: String, targetView: String? = nil) -> (key: String, bodyHash: Int) {
         let viewName: String
         if doc.previewBody != nil {
             viewName = "#Preview"
+        } else if let target = targetView {
+            viewName = target
+        } else if doc.viewOrder.count == 1 {
+            viewName = doc.viewOrder[0]
         } else {
-            viewName = doc.viewOrder.first ?? fileName
+            viewName = "#Ambiguous"
         }
         let bodyText: String
         if let view = doc.views[viewName], let body = view.bodyStatements {
