@@ -285,6 +285,9 @@ private extension MockValue {
         case .date: return "Date"
         case .customStruct: return "Struct"
         case .array: return "Array"
+        // 4.0.2 P0-6: auto-resolved kinds never need hand-filling.
+        case .stub: return "Stub"
+        case .queryArray: return "Query"
         }
     }
 }
