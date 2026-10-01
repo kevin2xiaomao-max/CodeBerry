@@ -37,6 +37,21 @@ enum V36Acceptance {
         return index
     }
 
+    /// Re-run the same index update (used to time incremental re-indexing).
+    static func update(index: PreviewProjectIndex, projectName: String = "V36Acceptance") {
+        let root = fixtureRoot()
+        let prefix = projectName + "/"
+        index.update(
+            projectRoot: root,
+            projectName: projectName,
+            currentPath: nil,
+            currentSource: "",
+            readFile: { path in
+                let rel = path.hasPrefix(prefix) ? String(path.dropFirst(prefix.count)) : path
+                return try? String(contentsOf: root.appendingPathComponent(rel), encoding: .utf8)
+            })
+    }
+
     /// Evaluate one view file from the corpus with the project index attached.
     static func evaluate(viewName: String, index: PreviewProjectIndex) throws
         -> (nodes: [PreviewViewNode], evaluator: PreviewEvaluator)
