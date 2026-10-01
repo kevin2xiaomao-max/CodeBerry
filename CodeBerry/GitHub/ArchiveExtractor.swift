@@ -111,10 +111,21 @@ enum ArchiveExtractor {
         return candidate
     }
 
-    /// SHA-256 hex of a file's contents — the manifest fingerprint.
+    /// Streaming SHA-256 hex of a file's contents — the manifest fingerprint.
+    /// P2 hotfix: reads 1 MiB chunks through a FileHandle into an incremental
+    /// CryptoKit hasher, so multi-hundred-MB archives never load fully into
+    /// memory. Byte-identical output to `sha256(of: Data)`. Throws on I/O
+    /// errors like the previous `Data(contentsOf:)` implementation did.
     static func sha256(of url: URL) throws -> String {
-        let data = try Data(contentsOf: url)
-        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let chunkSize = 1024 * 1024
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while true {
+            guard let chunk = try handle.read(upToCount: chunkSize), !chunk.isEmpty else { break }
+            hasher.update(data: chunk)
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     /// SHA-256 hex of in-memory data (for tests).
