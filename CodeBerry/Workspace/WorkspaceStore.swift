@@ -42,6 +42,22 @@ final class WorkspaceStore {
     /// Jump to Definition). Rebuilt on project open, updated on save.
     let symbolIndex = SymbolIndex()
 
+    // MARK: - M4.1 GitHub sync orchestration (P0-2)
+    /// GitHub metadata for the open project; nil for non-GitHub projects.
+    private(set) var githubMetadata: GitHubRepoMetadata?
+    /// Unresolved conflicts from the last applied sync.
+    private(set) var syncConflicts: [GitHubSyncConflict] = []
+    /// Retained while a sync plan is pending or conflicts are unresolved,
+    /// so "Use Remote" can copy remote content without re-downloading.
+    var pendingSyncPlan: GitHubSyncPlan?
+    var pendingSyncStaging: URL?
+    var pendingRemoteManifest: [String: String] = [:]
+    private(set) var isSyncing = false
+    var syncError: String?
+    var syncNotice: String?
+    var syncEngine: SnapshotSyncEngine?
+    let syncDownloader = SnapshotDownloader()
+
     var editorText = "" {
         didSet {
             guard !isLoadingFile, openFilePath != nil, editorText != oldValue else { return }
@@ -65,6 +81,7 @@ final class WorkspaceStore {
             refresh()
             rebuildSymbolIndex()
             analyzeProject()
+            refreshGitHubState()
             if let lastFile = UserDefaults.standard.string(forKey: Self.lastOpenFileKey),
                lastFile.hasPrefix(lastProject + "/") {
                 openFile(lastFile)
@@ -119,6 +136,7 @@ final class WorkspaceStore {
         refresh()
         rebuildSymbolIndex()
         analyzeProject()
+        refreshGitHubState()
         UserDefaults.standard.set(name, forKey: Self.lastProjectKey)
     }
 
@@ -128,6 +146,7 @@ final class WorkspaceStore {
         clearEditorState()
         currentProject = nil
         refresh()
+        refreshGitHubState()
         UserDefaults.standard.removeObject(forKey: Self.lastProjectKey)
     }
 

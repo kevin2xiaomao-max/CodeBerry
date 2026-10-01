@@ -102,6 +102,10 @@ struct ChangesTabView: View {
     var onManualMerge: (GitHubSyncConflict) -> Void = { _ in }
     var onSync: () -> Void = {}
     var isSyncing: Bool = false
+    /// False for non-GitHub projects: sync is disabled with an explanation.
+    var isGitHubProject: Bool = false
+    var syncError: String? = nil
+    var syncNotice: String? = nil
 
     var body: some View {
         NavigationStack {
@@ -156,7 +160,17 @@ struct ChangesTabView: View {
                             Text(l10n.t(.syncNow)).frame(maxWidth: .infinity)
                         }
                     }
-                    .disabled(isSyncing)
+                    .disabled(isSyncing || !isGitHubProject)
+                    if !isGitHubProject {
+                        Text(l10n.t(.githubNotAProject))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    if let syncError {
+                        Text(syncError).font(.caption).foregroundStyle(.red)
+                    }
+                    if let syncNotice {
+                        Text(syncNotice).font(.caption).foregroundStyle(.secondary)
+                    }
                 }
             }
             .navigationTitle(l10n.t(.changesTab))
@@ -199,6 +213,62 @@ struct OfflineBanner: View {
             .background(Color.orange)
             .clipShape(Capsule())
             .padding(.top, 8)
+        }
+    }
+}
+
+// MARK: - SyncPlanView
+//
+// Shows a sync plan BEFORE it is applied: which files the remote changed
+// (will be applied) and which files conflict (need manual resolution).
+// The user confirms or cancels; nothing is written before confirmation.
+
+struct SyncPlanView: View {
+    @Bindable private var l10n = L10nService.shared
+    let plan: GitHubSyncPlan
+    var onConfirm: () -> Void = {}
+    var onCancel: () -> Void = {}
+
+    var body: some View {
+        List {
+            if !plan.changes.isEmpty {
+                Section(l10n.t(.githubWillApply)) {
+                    ForEach(plan.changes, id: \.path) { change in
+                        HStack {
+                            Text(change.path).font(.subheadline).lineLimit(1)
+                            Spacer()
+                            Text(changeKindText(for: change.kind))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            if !plan.conflicts.isEmpty {
+                Section(l10n.t(.githubConflictsNeedResolve)) {
+                    ForEach(plan.conflicts, id: \.path) { conflict in
+                        Text(conflict.path).font(.subheadline).lineLimit(1)
+                    }
+                }
+            }
+        }
+        .navigationTitle(l10n.t(.githubSyncPlanTitle))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button(l10n.t(.cancel)) { onCancel() }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button(l10n.t(.githubSyncConfirm)) { onConfirm() }
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+    }
+
+    private func changeKindText(for kind: GitHubSyncChange.Kind) -> String {
+        switch kind {
+        case .added: return l10n.t(.changeAdded)
+        case .modified: return l10n.t(.changeModified)
+        case .deleted: return l10n.t(.changeDeleted)
         }
     }
 }

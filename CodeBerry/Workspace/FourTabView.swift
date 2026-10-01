@@ -90,55 +90,154 @@ struct PreviewTabView: View {
 /// Wires ChangesTabView to live snapshot data.
 struct ChangesTabContainer: View {
     @Bindable var store: WorkspaceStore
+    @Bindable private var l10n = L10nService.shared
     @State private var changes: [LocalChange] = []
-    @State private var conflicts: [GitHubSyncConflict] = []
-    @State private var isSyncing = false
     @State private var patchText: String?
     @State private var showingPatch = false
+    @State private var pendingPlan: GitHubSyncPlan?
+    @State private var showingPlan = false
+    @State private var isSyncing = false
 
     var body: some View {
         ChangesTabView(
             changes: changes,
-            conflicts: conflicts,
+            conflicts: store.syncConflicts,
             onExportPatch: exportPatch,
-            onKeepLocal: { _ in },
-            onUseRemote: { _ in },
+            onKeepLocal: resolveKeepLocal,
+            onUseRemote: resolveUseRemote,
             onManualMerge: { conflict in
+                // Manual merge: open the file in the editor. FourTabView's
+                // onChange(of: store.openFilePath) switches to the Code tab.
                 if let wsPath = store.workspacePath(ofProjectRelative: conflict.path) {
                     store.openFile(wsPath)
                 }
             },
-            onSync: {},
-            isSyncing: isSyncing)
+            onSync: startSync,
+            isSyncing: isSyncing || store.isSyncing,
+            isGitHubProject: store.githubMetadata != nil,
+            syncError: store.syncError,
+            syncNotice: store.syncNotice)
         .sheet(isPresented: $showingPatch) {
             if let patchText {
                 NavigationStack {
                     ScrollView {
                         Text(patchText).font(.system(.body, design: .monospaced))
                             .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .padding()
                     }
-                    .navigationTitle(L10nService.shared.t(.exportPatch))
+                    .navigationTitle(l10n.t(.exportPatch))
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button(l10n.t(.done)) { showingPatch = false }
+                        }
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showingPlan) {
+            if let pendingPlan {
+                NavigationStack {
+                    SyncPlanView(plan: pendingPlan,
+                                 onConfirm: confirmSync,
+                                 onCancel: cancelSync)
                 }
             }
         }
         .onAppear(perform: refresh)
+        .onChange(of: store.currentProject) { _, _ in refresh() }
     }
 
+    /// Real local changes: current manifest vs the snapshot base (P0-2).
     private func refresh() {
-        // TODO(M5): wire to GitHubRepoMetadata manifest + SyncEngine conflicts.
-        // For now, compute local changes against the last-known manifest.
-        changes = []
-        conflicts = []
+        changes = store.computeLocalChanges()
     }
 
+    /// Real unified diff: current content vs the pristine base copy (P0-2).
     private func exportPatch() {
         let diff = SnapshotChanges.unifiedDiff(
             changes: changes,
-            readFile: { store.previewFileContent($0) },
-            readBase: { _ in nil })
+            readFile: { relative in
+                guard let ws = store.workspacePath(ofProjectRelative: relative) else { return nil }
+                return store.previewFileContent(ws)
+            },
+            readBase: { store.baseFileContent(relativePath: $0) })
         patchText = diff
         showingPatch = true
+    }
+
+    /// "立即同步": plan first, show the plan, apply only on confirmation.
+    private func startSync() {
+        guard !isSyncing, !store.isSyncing else { return }
+        isSyncing = true
+        store.syncError = nil
+        store.syncNotice = nil
+        Task {
+            defer {
+                isSyncing = false
+                refresh()
+            }
+            do {
+                let plan = try await store.planGitHubSync()
+                if plan.isEmpty {
+                    store.syncNotice = l10n.t(.githubSyncedUpToDate)
+                } else {
+                    pendingPlan = plan
+                    showingPlan = true
+                }
+            } catch {
+                store.syncError = (error as? LocalizedError)?.errorDescription
+                    ?? error.localizedDescription
+            }
+        }
+    }
+
+    private func confirmSync() {
+        showingPlan = false
+        let appliedCount = pendingPlan?.changes.count ?? 0
+        pendingPlan = nil
+        do {
+            try store.applyPendingSync()
+            let conflictCount = store.syncConflicts.count
+            store.syncNotice = conflictCount > 0
+                ? l10n.t(.githubSyncConflicts, conflictCount)
+                : l10n.t(.githubSyncApplied, appliedCount)
+        } catch {
+            store.syncError = (error as? LocalizedError)?.errorDescription
+                ?? error.localizedDescription
+        }
+        refresh()
+    }
+
+    private func cancelSync() {
+        showingPlan = false
+        pendingPlan = nil
+        store.discardPendingSync()
+    }
+
+    private func resolveKeepLocal(_ conflict: GitHubSyncConflict) {
+        Task {
+            do {
+                try await store.resolveConflictKeepLocal(conflict)
+            } catch {
+                store.syncError = (error as? LocalizedError)?.errorDescription
+                    ?? error.localizedDescription
+            }
+            refresh()
+        }
+    }
+
+    private func resolveUseRemote(_ conflict: GitHubSyncConflict) {
+        Task {
+            do {
+                try await store.resolveConflictUseRemote(conflict)
+            } catch {
+                store.syncError = (error as? LocalizedError)?.errorDescription
+                    ?? error.localizedDescription
+            }
+            refresh()
+        }
     }
 }
 

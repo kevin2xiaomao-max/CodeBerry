@@ -242,6 +242,12 @@ enum L10nKey: String, CaseIterable {
     case githubSaveToken         // 保存令牌
     case githubDeleteToken       // 删除令牌
     case githubOpenFileAfterImport // 导入后打开的文件不存在，已打开仓库根目录
+    case githubNotAProject       // 不是 GitHub 导入的项目
+    case githubSyncPlanTitle     // 同步计划
+    case githubSyncConfirm       // 确认应用
+    case githubWillApply         // 将应用以下更改
+    case githubConflictsNeedResolve // 以下冲突需要手动处理
+    case switchWorkspace         // 切换 Workspace
     // GitHub errors
     case errGithubInvalidURL     // 不是有效的 GitHub 仓库链接
     case errGithubNetwork        // 网络错误：%@
@@ -611,6 +617,12 @@ final class L10nService: @unchecked Sendable {
         .githubSaveToken: ("保存令牌", "Save Token"),
         .githubDeleteToken: ("删除令牌", "Delete Token"),
         .githubOpenFileAfterImport: ("导入后打开的文件不存在，已打开仓库根目录", "The linked file wasn't in the snapshot; opened the repo root"),
+        .githubNotAProject: ("不是 GitHub 导入的项目", "Not a GitHub project"),
+        .githubSyncPlanTitle: ("同步计划", "Sync Plan"),
+        .githubSyncConfirm: ("确认应用", "Apply"),
+        .githubWillApply: ("将应用以下更改", "The following changes will be applied"),
+        .githubConflictsNeedResolve: ("以下冲突需要手动处理", "These conflicts need manual resolution"),
+        .switchWorkspace: ("切换 Workspace", "Switch Workspace"),
         .errGithubInvalidURL: ("不是有效的 GitHub 仓库链接", "Not a valid GitHub repository URL"),
         .errGithubNetwork: ("网络错误：%@", "Network error: %@"),
         .errGithubHTTP: ("GitHub 返回错误 %d：%@", "GitHub error %d: %@"),
