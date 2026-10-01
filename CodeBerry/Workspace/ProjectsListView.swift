@@ -149,6 +149,7 @@ struct ProjectsListView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("project-row-\(project.name)")
         .contextMenu {
             Button(l10n.t(.rename), systemImage: "pencil") {
                 renameTarget = project

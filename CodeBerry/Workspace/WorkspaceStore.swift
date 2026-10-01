@@ -149,16 +149,21 @@ final class WorkspaceStore {
         rebuildSymbolIndex()
         analyzeProject()
         refreshGitHubState()
+        // P0-1: entering a workspace persists the session, so killing the
+        // app mid-workspace restores back into it.
+        saveSession()
         UserDefaults.standard.set(name, forKey: Self.lastProjectKey)
     }
 
     func closeProject() {
-        saveSession()
         saveNowIfDirty()
         clearEditorState()
         currentProject = nil
         refresh()
         refreshGitHubState()
+        // P0-1: Back to Projects persists the exit — a relaunch stays on
+        // Projects instead of restore-locking the user back in.
+        SessionStore.clear()
         UserDefaults.standard.removeObject(forKey: Self.lastProjectKey)
     }
 

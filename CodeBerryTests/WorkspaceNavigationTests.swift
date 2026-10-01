@@ -83,4 +83,26 @@ final class WorkspaceNavigationTests: XCTestCase {
         XCTAssertNil(relaunched.currentProject)
         XCTAssertNil(UserDefaults.standard.string(forKey: "lastProjectPath"))
     }
+
+    /// P0-1: entering a workspace persists the session (kill → restore works).
+    func testOpenProjectPersistsSession() throws {
+        try makeProject("GH")
+        store.openProject("GH")
+        XCTAssertEqual(SessionStore.load().projectFolder, "GH")
+    }
+
+    /// P0-1: Back to Projects clears the persisted session — a relaunch
+    /// stays on Projects instead of restore-locking back in.
+    func testCloseProjectClearsSession() throws {
+        try makeProject("GH")
+        store.openProject("GH")
+        XCTAssertEqual(SessionStore.load().projectFolder, "GH")
+
+        store.closeProject()
+        XCTAssertNil(SessionStore.load().projectFolder)
+
+        // Simulate relaunch: stays on Projects.
+        let relaunched = WorkspaceStore(rootURL: tmp)
+        XCTAssertNil(relaunched.currentProject)
+    }
 }
