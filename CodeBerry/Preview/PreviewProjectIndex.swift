@@ -198,6 +198,13 @@ final class PreviewProjectIndex {
     /// canvas never waits on the background pass for the file being edited.
     /// Results merge back on the caller's actor; `self` is never touched
     /// off-thread.
+    ///
+    /// 4.0.2 P1-11: MainActor-isolated by design — the snapshot phase
+    /// reads MainActor-isolated store state (`readFile`), and only the
+    /// parse batches escape to a detached task. This also keeps the
+    /// `await` call in `PreviewCanvasView.updateIndex` free of Swift 6
+    /// `sending` data-race errors.
+    @MainActor
     func rebuildInBackground(projectRoot: URL,
                              projectName: String,
                              currentPath: String?,
