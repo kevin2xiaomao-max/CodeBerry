@@ -210,6 +210,17 @@ enum L10nKey: String, CaseIterable {
     case diagNoMockValue
     case diagTypePreviewDefault   // 4.0.2 P0-3: 「%@」使用预览默认值
 
+    // MARK: 4.0.3 diagnostics
+    case diagIndexSymbolConflict    // 符号“%@”在多个文件中定义（%@），已选用 %@ 的定义
+    case diagResolveHint            // “%@”可能是指：%@
+    case diagSystemApproximation    // 系统 API %@ 使用近似值：%@
+    case diagComputedPropertyNeedsMock   // 计算属性“%@”需要数据：%@
+    case diagComputedPropertySideEffect  // 计算属性“%@”含副作用，未执行（%@）
+    case diagSwiftDataSubstituted   // SwiftData %@ 已用 %@ 替代预览
+    case diagSwiftDataNoSubstitution  // SwiftData %@ 无可用替代，无法形成有效预览
+    case diagNoTargetView           // 未指定目标 View
+    case diagGeneratedShadowed      // 生成的 %@ 被同名 production 符号遮蔽
+
     // MARK: GitHub Direct (§8/§9, 4.0 M1)
     case githubImportTitle       // 从 GitHub 导入
     case githubOpenFromGitHub    // 从 GitHub 打开
@@ -592,6 +603,21 @@ final class L10nService: @unchecked Sendable {
         .diagMockNeeded: ("“%@”需要 Mock 数据才能预览", "\"%@\" needs mock data to preview."),
         .diagNoMockValue: ("缺少 Mock 值：%@", "Missing mock value: %@"),
         .diagTypePreviewDefault: ("「%@」使用预览默认值", "\"%@\" uses preview defaults"),
+        // 4.0.3 diagnostics
+        .diagIndexSymbolConflict: ("符号“%@”在多个文件中定义（%@），已选用 %@ 的定义",
+                                   "Symbol \"%@\" is defined in multiple files (%@); using the definition from %@."),
+        .diagResolveHint: ("“%@”可能是指：%@", "\"%@\" might refer to: %@"),
+        .diagSystemApproximation: ("系统 API %@ 使用近似值：%@", "System API %@ approximated: %@"),
+        .diagComputedPropertyNeedsMock: ("计算属性“%@”需要数据：%@", "Computed property \"%@\" needs data: %@"),
+        .diagComputedPropertySideEffect: ("计算属性“%@”含副作用，未执行（%@）",
+                                          "Computed property \"%@\" has side effects, not evaluated (%@)"),
+        .diagSwiftDataSubstituted: ("SwiftData %@ 已用 %@ 替代预览",
+                                    "SwiftData %@ substituted with %@ for preview"),
+        .diagSwiftDataNoSubstitution: ("SwiftData %@ 无可用替代，无法形成有效预览",
+                                       "SwiftData %@ has no available substitution; cannot form a meaningful preview"),
+        .diagNoTargetView: ("未指定目标 View", "No target view specified"),
+        .diagGeneratedShadowed: ("生成的 %@ 被同名 production 符号遮蔽",
+                                 "Generated %@ is shadowed by a same-name production symbol"),
 
         // GitHub Direct (4.0 M1)
         .githubImportTitle: ("从 GitHub 导入", "Import from GitHub"),

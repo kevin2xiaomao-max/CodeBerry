@@ -44,6 +44,23 @@ jobs:
 
       - name: 2b. Unit tests (PreviewEngineTests)
         run: |
+          # 4.0.3: Real V3.6 Acceptance needs the XiaoZhangGui reference tree.
+          # The PAT is an optional repo secret (XZG_CHECKOUT_PAT); without it
+          # the real-tree class is excluded via -skip-testing with a loud
+          # warning — never a silent skip. The exclusion is recorded in the
+          # release report.
+          SKIP_REAL=""
+          if [ -n "${{ secrets.XZG_CHECKOUT_PAT }}" ]; then
+            git clone --depth 1 --branch feature/v3.6.1-reference-home \
+              "https://x-access-token:${{ secrets.XZG_CHECKOUT_PAT }}@github.com/kevin2xiaomao-max/XiaoZhangGui" \
+              /tmp/xzg-reference
+            export XZG_REFERENCE_ROOT=/tmp/xzg-reference
+            echo "XZG_REFERENCE_ROOT=/tmp/xzg-reference" >> "$GITHUB_ENV"
+            echo "Real V3.6 Acceptance: reference tree cloned, will RUN."
+          else
+            echo "::warning::XZG_CHECKOUT_PAT not configured — XiaoZhangGuiRealV36AcceptanceTests SKIPPED in this run (see release report)."
+            SKIP_REAL="-skip-testing:CodeBerryTests/XiaoZhangGuiRealV36AcceptanceTests"
+          fi
           xcodebuild \
             -project CodeBerry.xcodeproj \
             -scheme CodeBerry \
@@ -52,6 +69,7 @@ jobs:
             -destination 'platform=iOS Simulator,name=iPhone 17' \
             -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO \
+            $SKIP_REAL \
             test
 
       - name: 3. Device build (unsigned, generic/platform=iOS)
@@ -78,20 +96,20 @@ jobs:
             exit 1
           fi
           echo "Found app bundle: $APP_PATH"
-          rm -rf Payload CodeBerry-Lite-4.0.2-unsigned.ipa
+          rm -rf Payload CodeBerry-Lite-4.0.3-unsigned.ipa
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
           echo "--- Payload contents ---"
           ls -la Payload/CodeBerry.app
-          /usr/bin/zip -qry CodeBerry-Lite-4.0.2-unsigned.ipa Payload
+          /usr/bin/zip -qry CodeBerry-Lite-4.0.3-unsigned.ipa Payload
           echo "--- IPA ---"
-          ls -lh CodeBerry-Lite-4.0.2-unsigned.ipa
+          ls -lh CodeBerry-Lite-4.0.3-unsigned.ipa
           echo "--- IPA table of contents (sanity) ---"
-          unzip -l CodeBerry-Lite-4.0.2-unsigned.ipa | grep "Payload/CodeBerry.app" | head -8
+          unzip -l CodeBerry-Lite-4.0.3-unsigned.ipa | grep "Payload/CodeBerry.app" | head -8
 
       - name: 5. Upload unsigned IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CodeBerry-Lite-4.0.2-unsigned
-          path: CodeBerry-Lite-4.0.2-unsigned.ipa
+          name: CodeBerry-Lite-4.0.3-unsigned
+          path: CodeBerry-Lite-4.0.3-unsigned.ipa
           if-no-files-found: error

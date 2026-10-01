@@ -121,6 +121,10 @@ final class PreviewProjectIndex {
     /// 4.0.2 P0-3: all ordinary types: name → info.
     private(set) var typesByName: [String: PreviewTypeInfo] = [:]
 
+    /// 4.0.3 S1: index-time diagnostics (same-name symbol conflicts, …).
+    /// Surfaced by the acceptance harness and the canvas diagnostics panel.
+    private(set) var indexDiagnostics: [PreviewDiagnostic] = []
+
     /// Progress UI (§二: "正在建立预览索引").
     var isIndexing = false
     var indexedCount = 0
@@ -273,15 +277,48 @@ final class PreviewProjectIndex {
         var views: [String: (file: String, view: PreviewViewStruct)] = [:]
         var tokens: [String: PreviewToken] = [:]
         var types: [String: PreviewTypeInfo] = [:]
+        // 4.0.3 S1: track which files contributed each symbol so same-name
+        // conflicts become an observable warning instead of a silent
+        // last-writer-wins.
+        var viewSources: [String: [String]] = [:]
+        var typeSources: [String: [String]] = [:]
         for path in files.keys.sorted() {
             guard let entry = files[path] else { continue }
-            for (name, view) in entry.views { views[name] = (path, view) }
+            for (name, view) in entry.views {
+                views[name] = (path, view)
+                viewSources[name, default: []].append(path)
+            }
             for token in entry.tokens { tokens[token.qualifiedName] = token }
-            for (name, info) in entry.types { types[name] = info }
+            for (name, info) in entry.types {
+                types[name] = info
+                typeSources[name, default: []].append(path)
+            }
         }
         viewsByName = views
         tokensByName = tokens
         typesByName = types
+
+        // 4.0.3 S1: record conflicts (deterministic order for stable tests).
+        var diags: [PreviewDiagnostic] = []
+        for name in viewSources.keys.sorted() {
+            let sources = viewSources[name] ?? []
+            if sources.count > 1 {
+                diags.append(PreviewDiagnostic(
+                    severity: .warning, key: .diagIndexSymbolConflict,
+                    params: [name, sources.joined(separator: ", "), sources.last ?? ""],
+                    file: sources.first ?? "", line: nil, api: name))
+            }
+        }
+        for name in typeSources.keys.sorted() {
+            let sources = typeSources[name] ?? []
+            if sources.count > 1 {
+                diags.append(PreviewDiagnostic(
+                    severity: .warning, key: .diagIndexSymbolConflict,
+                    params: [name, sources.joined(separator: ", "), sources.last ?? ""],
+                    file: sources.first ?? "", line: nil, api: name))
+            }
+        }
+        indexDiagnostics = diags
     }
 
     // MARK: - Parsing (thread-safe: fresh parser per call, no shared state)
