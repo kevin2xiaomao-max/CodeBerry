@@ -33,11 +33,19 @@
 			remoteGlobalIDString = BC0000000000000000000006;
 			remoteInfo = CodeBerry;
 		};
+		CB400000000000000000000B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BC000000000000000000000A /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BC0000000000000000000006;
+			remoteInfo = CodeBerry;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		BC0000000000000000000001 /* CodeBerry.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CodeBerry.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CB3000000000000000000008 /* CodeBerryTests.xctest */ = {isa = PBXFileReference; explicitFileType = "wrapper.cfbundle"; includeInIndex = 0; path = CodeBerryTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		CB4000000000000000000008 /* CodeBerryUITests.xctest */ = {isa = PBXFileReference; explicitFileType = "wrapper.cfbundle"; includeInIndex = 0; path = CodeBerryUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -49,6 +57,11 @@
 		CB3000000000000000000007 /* CodeBerryTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = CodeBerryTests;
+			sourceTree = "<group>";
+		};
+		CB4000000000000000000007 /* CodeBerryUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = CodeBerryUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -84,6 +97,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		CB4000000000000000000004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -92,6 +112,7 @@
 			children = (
 				BC0000000000000000000002 /* CodeBerry */,
 				CB3000000000000000000007 /* CodeBerryTests */,
+				CB4000000000000000000007 /* CodeBerryUITests */,
 				BC0000000000000000000005 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -101,6 +122,7 @@
 			children = (
 				BC0000000000000000000001 /* CodeBerry.app */,
 				CB3000000000000000000008 /* CodeBerryTests.xctest */,
+				CB4000000000000000000008 /* CodeBerryUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -112,6 +134,11 @@
 			isa = PBXTargetDependency;
 			target = BC0000000000000000000006 /* CodeBerry */;
 			targetProxy = CB300000000000000000000B /* PBXContainerItemProxy */;
+		};
+		CB4000000000000000000006 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BC0000000000000000000006 /* CodeBerry */;
+			targetProxy = CB400000000000000000000B /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -177,6 +204,27 @@
 			productReference = CB3000000000000000000008 /* CodeBerryTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		CB4000000000000000000001 /* CodeBerryUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CB4000000000000000000002 /* Build configuration list for PBXNativeTarget "CodeBerryUITests" */;
+			buildPhases = (
+				CB4000000000000000000003 /* Sources */,
+				CB4000000000000000000004 /* Frameworks */,
+				CB4000000000000000000005 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				CB4000000000000000000006 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				CB4000000000000000000007 /* CodeBerryUITests */,
+			);
+			name = CodeBerryUITests;
+			productName = CodeBerryUITests;
+			productReference = CB4000000000000000000008 /* CodeBerryUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -190,6 +238,9 @@
 						CreatedOnToolsVersion = 26.5;
 					};
 					CB3000000000000000000001 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+					CB4000000000000000000001 = {
 						CreatedOnToolsVersion = 26.5;
 					};
 				};
@@ -216,6 +267,7 @@
 			targets = (
 				BC0000000000000000000006 /* CodeBerry */,
 				CB3000000000000000000001 /* CodeBerryTests */,
+				CB4000000000000000000001 /* CodeBerryUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -235,6 +287,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		CB4000000000000000000005 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -246,6 +305,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		CB3000000000000000000003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CB4000000000000000000003 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -414,6 +480,38 @@
 			};
 			name = Release;
 		};
+		CB4000000000000000000009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 401;
+				DEVELOPMENT_TEAM = 54GQFS3JDD;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 4.0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.oscarsantos.CodeBerryUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = CodeBerry;
+			};
+			name = Debug;
+		};
+		CB400000000000000000000A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 401;
+				DEVELOPMENT_TEAM = 54GQFS3JDD;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 4.0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.oscarsantos.CodeBerryUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = CodeBerry;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -440,6 +538,15 @@
 			buildConfigurations = (
 				CB3000000000000000000009 /* Debug */,
 				CB300000000000000000000A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CB4000000000000000000002 /* Build configuration list for PBXNativeTarget "CodeBerryUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CB4000000000000000000009 /* Debug */,
+				CB400000000000000000000A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

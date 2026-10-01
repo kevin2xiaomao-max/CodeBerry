@@ -110,12 +110,6 @@ actor SnapshotSyncEngine {
             await MainActor.run { progress(.done) }
             return (GitHubSyncPlan(changes: [], conflicts: [], remoteSHA: remoteSHA), nil, [:])
         }
-        await MainActor.run { progress(.resolving) }
-        let remoteSHA = try await resolveRemoteSHA(for: metadata)
-        guard remoteSHA != metadata.baseSnapshotSHA else {
-            await MainActor.run { progress(.done) }
-            return (GitHubSyncPlan(changes: [], conflicts: [], remoteSHA: remoteSHA), nil)
-        }
 
         await MainActor.run { progress(.downloading(-1)) }
         hookDownloadState { p in Task { @MainActor in progress(.downloading(p)) } }

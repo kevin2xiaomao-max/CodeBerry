@@ -18,6 +18,7 @@ final class WorkspaceSyncOrchestrationTests: XCTestCase {
         // Isolate session restore: never reopen a foreign project.
         UserDefaults.standard.removeObject(forKey: "lastProjectPath")
         UserDefaults.standard.removeObject(forKey: "lastOpenFilePath")
+        SessionStore.clear()
         store = WorkspaceStore(rootURL: tmp)
     }
 
@@ -25,6 +26,7 @@ final class WorkspaceSyncOrchestrationTests: XCTestCase {
         try? FileManager.default.removeItem(at: tmp)
         UserDefaults.standard.removeObject(forKey: "lastProjectPath")
         UserDefaults.standard.removeObject(forKey: "lastOpenFilePath")
+        SessionStore.clear()
         try await super.tearDown()
     }
 
@@ -183,8 +185,11 @@ final class WorkspaceSyncOrchestrationTests: XCTestCase {
 
     func testPlanGitHubSyncThrowsForNonGitHubProject() async {
         store.openProject("Welcome")
-        await XCTAssertThrowsError(try await store.planGitHubSync()) { error in
-            XCTAssertTrue(error is WorkspaceSyncError)
+        do {
+            _ = try await store.planGitHubSync()
+            XCTFail("expected WorkspaceSyncError.notGitHubProject")
+        } catch {
+            XCTAssertTrue(error is WorkspaceSyncError, "unexpected error: \(error)")
         }
     }
 }

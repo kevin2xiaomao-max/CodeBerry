@@ -78,20 +78,20 @@ jobs:
             exit 1
           fi
           echo "Found app bundle: $APP_PATH"
-          rm -rf Payload CodeBerry-Lite-4.0-unsigned.ipa
+          rm -rf Payload CodeBerry-Lite-4.0.1-unsigned.ipa
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
           echo "--- Payload contents ---"
           ls -la Payload/CodeBerry.app
-          /usr/bin/zip -qry CodeBerry-Lite-4.0-unsigned.ipa Payload
+          /usr/bin/zip -qry CodeBerry-Lite-4.0.1-unsigned.ipa Payload
           echo "--- IPA ---"
-          ls -lh CodeBerry-Lite-4.0-unsigned.ipa
+          ls -lh CodeBerry-Lite-4.0.1-unsigned.ipa
           echo "--- IPA table of contents (sanity) ---"
-          unzip -l CodeBerry-Lite-4.0-unsigned.ipa | grep "Payload/CodeBerry.app" | head -8
+          unzip -l CodeBerry-Lite-4.0.1-unsigned.ipa | grep "Payload/CodeBerry.app" | head -8
 
       - name: 5. Upload unsigned IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CodeBerry-Lite-4.0-unsigned
-          path: CodeBerry-Lite-4.0-unsigned.ipa
+          name: CodeBerry-Lite-4.0.1-unsigned
+          path: CodeBerry-Lite-4.0.1-unsigned.ipa
           if-no-files-found: error

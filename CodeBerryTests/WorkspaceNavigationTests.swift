@@ -19,6 +19,7 @@ final class WorkspaceNavigationTests: XCTestCase {
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
         UserDefaults.standard.removeObject(forKey: "lastProjectPath")
         UserDefaults.standard.removeObject(forKey: "lastOpenFilePath")
+        SessionStore.clear()
         store = WorkspaceStore(rootURL: tmp)
     }
 
@@ -26,6 +27,7 @@ final class WorkspaceNavigationTests: XCTestCase {
         try? FileManager.default.removeItem(at: tmp)
         UserDefaults.standard.removeObject(forKey: "lastProjectPath")
         UserDefaults.standard.removeObject(forKey: "lastOpenFilePath")
+        SessionStore.clear()
         try await super.tearDown()
     }
 

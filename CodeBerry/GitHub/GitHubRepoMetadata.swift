@@ -50,6 +50,10 @@ struct GitHubRepoMetadata: Codable, Equatable {
             guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
             let rel = url.path.replacingOccurrences(of: projectFolder.standardized.path + "/", with: "")
             guard !rel.isEmpty, !rel.contains("..") else { continue }
+            // P0-2: the metadata file itself is not a user change — exclude
+            // it, or every Changes tab would list it as "added" forever
+            // (the manifest is built before metadata.save() in importRepo).
+            guard rel != Self.fileName else { continue }
             if let hash = try? ArchiveExtractor.sha256(of: url) {
                 out[rel] = hash
             }

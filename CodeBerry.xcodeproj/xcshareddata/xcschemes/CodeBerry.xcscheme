@@ -39,6 +39,16 @@
                ReferencedContainer = "container:CodeBerry.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "CB4000000000000000000001"
+               BuildableName = "CodeBerryUITests.xctest"
+               BlueprintName = "CodeBerryUITests"
+               ReferencedContainer = "container:CodeBerry.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction
