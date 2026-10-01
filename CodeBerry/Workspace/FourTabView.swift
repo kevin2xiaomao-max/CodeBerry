@@ -177,6 +177,7 @@ struct ChangesTabContainer: View {
 
     var body: some View {
         ChangesTabView(
+            store: store,
             changes: changes,
             conflicts: store.syncConflicts,
             onExportPatch: exportPatch,
@@ -194,7 +195,6 @@ struct ChangesTabContainer: View {
             isGitHubProject: store.githubMetadata != nil,
             syncError: store.syncError,
             syncNotice: store.syncNotice,
-            store: store,
             onShowSettings: onShowSettings)
         .sheet(isPresented: $showingPatch) {
             if let patchText {

@@ -44,6 +44,10 @@ struct EditorPaneView: View {
     @State private var referenceResults: [ReferenceHit] = []
 
     var body: some View {
+        // Group wraps the conditional so P1-1 modifiers below chain onto a
+        // single concrete view value (a bare if/else can't take trailing
+        // modifiers in a ViewBuilder).
+        Group {
         if let path = store.openFilePath {
             VStack(spacing: 0) {
                 tabBar
@@ -165,6 +169,7 @@ struct EditorPaneView: View {
             } description: {
                 Text(L10nService.shared.t(.noFileOpenDesc))
             }
+        }
         }
         // P1-1: consume Preview → Code line jumps requested via the store.
         .onChange(of: store.pendingLineJump) { _, _ in consumeLineJump() }

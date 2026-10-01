@@ -56,15 +56,17 @@ final class WorkspaceStore {
 
     // MARK: - M4.1 GitHub sync orchestration (P0-2)
     /// GitHub metadata for the open project; nil for non-GitHub projects.
-    private(set) var githubMetadata: GitHubRepoMetadata?
+    /// Mutated by the sync orchestration in WorkspaceSync.swift (same module).
+    var githubMetadata: GitHubRepoMetadata?
     /// Unresolved conflicts from the last applied sync.
-    private(set) var syncConflicts: [GitHubSyncConflict] = []
+    var syncConflicts: [GitHubSyncConflict] = []
     /// Retained while a sync plan is pending or conflicts are unresolved,
     /// so "Use Remote" can copy remote content without re-downloading.
     var pendingSyncPlan: GitHubSyncPlan?
     var pendingSyncStaging: URL?
     var pendingRemoteManifest: [String: String] = [:]
-    private(set) var isSyncing = false
+    /// Mutated by the sync orchestration in WorkspaceSync.swift (same module).
+    var isSyncing = false
     var syncError: String?
     var syncNotice: String?
     var syncEngine: SnapshotSyncEngine?
