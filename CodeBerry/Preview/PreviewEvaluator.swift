@@ -229,9 +229,12 @@ final class PreviewEvaluator {
             throw PreviewError(.errNoBody, viewStruct.name)
         }
         // §七: external dependencies need Mock data to preview.
+        // 4.0.2 P1-9: fixture needs are NeedsMock, never Error — only
+        // syntax, genuinely-unresolved identifiers, and evaluator fatals
+        // are errors. (NeedsMock no longer blocks the preview.)
         for req in viewStruct.mockRequirements {
             if mockStore?.value(for: req.propertyName) == nil {
-                diagnose(.error, .diagMockNeeded, params: [req.propertyName])
+                diagnose(.needsMock, .diagMockNeeded, params: [req.propertyName])
             }
         }
         let children = try viewBuilderChildren(body, env: env)
