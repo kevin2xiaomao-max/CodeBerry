@@ -86,6 +86,11 @@ struct PreviewFixtureGenerator {
         var usesSwiftData = false
         var modelTypes: [String] = []
         private var insideTargetView = false
+        // 4.0.2: a stack, not a defer — SyntaxVisitor visits children
+        // AFTER visit() returns, so `defer { insideTargetView = was }`
+        // would reset the flag before the @Query vars are ever seen
+        // (that bug silently produced modelTypes == []).
+        private var viewStack: [Bool] = []
 
         init(viewName: String) {
             self.viewName = viewName
@@ -100,14 +105,17 @@ struct PreviewFixtureGenerator {
         }
 
         override func visit(_ node: StructDeclSyntax) -> SyntaxVisitorContinueKind {
-            let was = insideTargetView
             let inherits = (node.inheritanceClause?.inheritedTypes ?? []).map { $0.type.trimmedDescription }
-            if node.name.text == viewName && inherits.contains("View") {
-                foundView = true
-                insideTargetView = true
-            }
-            defer { insideTargetView = was }
+            let isTarget = node.name.text == viewName && inherits.contains("View")
+            if isTarget { foundView = true }
+            viewStack.append(isTarget)
+            insideTargetView = viewStack.contains(true)
             return .visitChildren
+        }
+
+        override func visitPost(_ node: StructDeclSyntax) {
+            if !viewStack.isEmpty { viewStack.removeLast() }
+            insideTargetView = viewStack.contains(true)
         }
 
         override func visit(_ node: VariableDeclSyntax) -> SyntaxVisitorContinueKind {
