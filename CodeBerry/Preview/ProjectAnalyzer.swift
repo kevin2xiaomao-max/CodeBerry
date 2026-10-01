@@ -135,8 +135,14 @@ struct ProjectAnalyzer {
             collector.walk(tree)
             let hasError = tree.hasError
 
+            // 4.0.3 S10 (P0-H): Page Discovery only lists production
+            // views — a generated fixture is never a second production view.
+            let role = PreviewSourceRole.classify(path: rel, content: text)
+            let isPreviewableFile = role.isPreviewablePage
+
             for viewName in collector.viewStructs {
                 views.insert(viewName)
+                guard isPreviewableFile else { continue }
                 let k: PreviewCandidate.Kind
                 if collector.previewProviders.contains(viewName) { k = .previewProvider }
                 else if viewName.hasSuffix("Page") || viewName.hasSuffix("Screen")
@@ -148,6 +154,7 @@ struct ProjectAnalyzer {
             }
             // PreviewProvider structs that don't inherit View (the common
             // `struct X_Previews: PreviewProvider` pattern) are candidates too.
+            guard isPreviewableFile else { continue }
             for providerName in collector.previewProviders where !views.contains(providerName) {
                 views.insert(providerName)
                 candidates.append(PreviewCandidate(filePath: rel, viewName: providerName,

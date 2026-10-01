@@ -297,12 +297,29 @@ final class PreviewProjectIndex {
         var typeSources: [String: [String]] = [:]
         for path in files.keys.sorted() {
             guard let entry = files[path] else { continue }
+            let role = PreviewSourceRole.classify(path: path)
             for (name, view) in entry.views {
+                // 4.0.3 S10 (P0-H): a production definition always wins
+                // over a same-name generated/test/prototype one — a
+                // generated fixture can never shadow (or become) a
+                // production view.
+                if let existing = views[name],
+                   !Self.roleWins(newRole: role,
+                                  over: PreviewSourceRole.classify(path: existing.file)) {
+                    viewSources[name, default: []].append(path)
+                    continue
+                }
                 views[name] = (path, view)
                 viewSources[name, default: []].append(path)
             }
             for token in entry.tokens { tokens[token.qualifiedName] = token }
             for (name, info) in entry.types {
+                if let existing = types[name],
+                   !Self.roleWins(newRole: role,
+                                  over: PreviewSourceRole.classify(path: existing.filePath)) {
+                    typeSources[name, default: []].append(path)
+                    continue
+                }
                 types[name] = info
                 typeSources[name, default: []].append(path)
             }
@@ -312,26 +329,49 @@ final class PreviewProjectIndex {
         typesByName = types
 
         // 4.0.3 S1: record conflicts (deterministic order for stable tests).
+        // 4.0.3 S10: a production-vs-generated collision gets the specific
+        // diagGeneratedShadowed instead of the generic conflict warning.
         var diags: [PreviewDiagnostic] = []
         for name in viewSources.keys.sorted() {
             let sources = viewSources[name] ?? []
             if sources.count > 1 {
-                diags.append(PreviewDiagnostic(
-                    severity: .warning, key: .diagIndexSymbolConflict,
-                    params: [name, sources.joined(separator: ", "), sources.last ?? ""],
-                    file: sources.first ?? "", line: nil, api: name))
+                diags.append(Self.collisionDiagnostic(name: name, sources: sources))
             }
         }
         for name in typeSources.keys.sorted() {
             let sources = typeSources[name] ?? []
             if sources.count > 1 {
-                diags.append(PreviewDiagnostic(
-                    severity: .warning, key: .diagIndexSymbolConflict,
-                    params: [name, sources.joined(separator: ", "), sources.last ?? ""],
-                    file: sources.first ?? "", line: nil, api: name))
+                diags.append(Self.collisionDiagnostic(name: name, sources: sources))
             }
         }
         indexDiagnostics = diags
+    }
+
+    /// 4.0.3 S10 (P0-H): production beats any non-production role;
+    /// within the same role the later (sorted) path wins, preserving the
+    /// pre-4.0.3 last-writer-wins behavior.
+    private static func roleWins(newRole: PreviewSourceRole,
+                                 over existingRole: PreviewSourceRole) -> Bool {
+        if newRole == .production, existingRole != .production { return true }
+        if existingRole == .production, newRole != .production { return false }
+        return true
+    }
+
+    /// 4.0.3 S10: collision diagnostic — generated shadowed by production
+    /// gets the specific key; same-role collisions keep the S1 warning.
+    private static func collisionDiagnostic(name: String, sources: [String]) -> PreviewDiagnostic {
+        let roles = Set(sources.map { PreviewSourceRole.classify(path: $0) })
+        if roles.contains(.production), roles.count > 1 {
+            let generated = sources.filter { PreviewSourceRole.classify(path: $0) != .production }
+            return PreviewDiagnostic(
+                severity: .warning, key: .diagGeneratedShadowed,
+                params: [name, generated.joined(separator: ", ")],
+                file: sources.first ?? "", line: nil, api: name)
+        }
+        return PreviewDiagnostic(
+            severity: .warning, key: .diagIndexSymbolConflict,
+            params: [name, sources.joined(separator: ", "), sources.last ?? ""],
+            file: sources.first ?? "", line: nil, api: name)
     }
 
     // MARK: - Parsing (thread-safe: fresh parser per call, no shared state)
