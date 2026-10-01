@@ -77,6 +77,9 @@ actor SnapshotSyncEngine {
             importedAt: Date(), lastSyncAt: nil,
             manifest: GitHubRepoMetadata.buildManifest(projectFolder: projectFolder))
         try metadata.save(projectFolder: projectFolder)
+        // P0-2: pristine base copy for patch export's readBase. Hidden dir,
+        // so manifests and the navigator (skipsHiddenFiles) ignore it.
+        try Self.installBaseCopy(projectFolder: projectFolder)
         GitHubRecentStore.record(owner: parsed.owner, repo: parsed.repo, projectFolder: folderName)
         await MainActor.run { progress(.done) }
         return folderName
@@ -94,12 +97,19 @@ actor SnapshotSyncEngine {
     /// The remote HEAD is resolved first; when it equals `baseSnapshotSHA`
     /// the plan is trivially empty (no download at all).
     ///
-    /// Returns the plan plus the staging directory holding the extracted
-    /// remote snapshot. The caller must pass `staging` to `apply(plan:…)` and
-    /// then call `discardStaging(_:)` — or `discardStaging(_:)` directly when
-    /// the user cancels.
+    /// Returns the plan, the staging directory holding the extracted
+    /// remote snapshot, and the remote manifest. The caller must pass
+    /// `staging` to `apply(plan:…)` and then call `discardStaging(_:)` —
+    /// or `discardStaging(_:)` directly when the user cancels.
     func planSync(projectFolder: URL, metadata: GitHubRepoMetadata,
-                  progress: @escaping @Sendable (SyncPhase) -> Void) async throws -> (plan: GitHubSyncPlan, staging: URL?) {
+                  progress: @escaping @Sendable (SyncPhase) -> Void) async throws
+        -> (plan: GitHubSyncPlan, staging: URL?, remoteManifest: [String: String]) {
+        await MainActor.run { progress(.resolving) }
+        let remoteSHA = try await resolveRemoteSHA(for: metadata)
+        guard remoteSHA != metadata.baseSnapshotSHA else {
+            await MainActor.run { progress(.done) }
+            return (GitHubSyncPlan(changes: [], conflicts: [], remoteSHA: remoteSHA), nil, [:])
+        }
         await MainActor.run { progress(.resolving) }
         let remoteSHA = try await resolveRemoteSHA(for: metadata)
         guard remoteSHA != metadata.baseSnapshotSHA else {
@@ -124,7 +134,7 @@ actor SnapshotSyncEngine {
         let plan = Self.threeWayDiff(base: metadata.manifest, local: localManifest,
                                      remote: remoteManifest, remoteSHA: remoteSHA)
         await MainActor.run { progress(.done) }
-        return (plan, staging)
+        return (plan, staging, remoteManifest)
     }
 
     nonisolated func discardStaging(_ staging: URL?) {
@@ -136,6 +146,15 @@ actor SnapshotSyncEngine {
     /// left untouched (§9). Updates the manifest + metadata on success.
     /// `staging` is the directory returned by `planSync` (nil when the plan
     /// is empty — nothing to apply).
+    ///
+    /// P1-2 (partial sync): when `plan.conflicts` is non-empty the workspace
+    /// is NOT cleanly at `remoteSHA`, so `baseSnapshotSHA` must NOT advance
+    /// and conflicted files keep their OLD base hashes. Only cleanly applied
+    /// paths advance to the remote hashes — the next three-way diff still
+    /// detects the divergence correctly and local content is never silently
+    /// promoted into a "clean" base. Paths untouched by the plan (e.g.
+    /// non-conflicting local edits) also keep their old base hashes, so they
+    /// stay visible as local changes instead of being baked into the base.
     /// nonisolated: touches only the immutable `fm` and static helpers.
     nonisolated func apply(plan: GitHubSyncPlan, staging: URL?,
                            metadata: GitHubRepoMetadata,
@@ -157,11 +176,82 @@ actor SnapshotSyncEngine {
             }
         }
         var updated = metadata
-        updated.baseSnapshotSHA = plan.remoteSHA
         updated.lastSyncAt = Date()
-        updated.manifest = GitHubRepoMetadata.buildManifest(projectFolder: projectFolder)
+        if plan.conflicts.isEmpty {
+            // Clean sync: the workspace now mirrors remoteSHA exactly.
+            updated.baseSnapshotSHA = plan.remoteSHA
+        }
+        // Advance the base ONLY for cleanly applied paths. On a clean sync
+        // applying every change to the old base yields exactly the remote
+        // tree, so this equals the old rebuild-from-workspace behavior for
+        // untouched workspaces — but it no longer bakes unrelated local
+        // edits into the base.
+        var base = metadata.manifest
+        if let staging {
+            let remoteManifest = GitHubRepoMetadata.buildManifest(projectFolder: staging)
+            for change in plan.changes {
+                if let hash = remoteManifest[change.path] {
+                    base[change.path] = hash
+                } else {
+                    base.removeValue(forKey: change.path)
+                }
+            }
+            try Self.refreshBaseCopy(projectFolder: projectFolder, staging: staging,
+                                     appliedChanges: plan.changes,
+                                     fullRefresh: plan.conflicts.isEmpty)
+        }
+        updated.manifest = base
         try updated.save(projectFolder: projectFolder)
         return updated
+    }
+
+    // MARK: - P0-2: pristine base copy
+
+    /// Copies a tree into the hidden `.codeberry-base/` directory — the
+    /// pristine snapshot base used by patch export's `readBase`. Hidden, so
+    /// manifests and the navigator (`skipsHiddenFiles`) ignore it.
+    nonisolated static func installBaseCopy(projectFolder: URL) throws {
+        try replaceBaseCopy(projectFolder: projectFolder, from: projectFolder)
+    }
+
+    /// Keeps `.codeberry-base/` consistent with the base manifest after apply:
+    /// full refresh on clean sync (base == staging tree), per-change update on
+    /// partial sync. A missing base copy (pre-4.0.1 imports) is rebuilt fully.
+    nonisolated static func refreshBaseCopy(projectFolder: URL, staging: URL,
+                                            appliedChanges: [GitHubSyncChange],
+                                            fullRefresh: Bool) throws {
+        if fullRefresh || !FileManager.default.fileExists(
+            atPath: projectFolder.appendingPathComponent(GitHubRepoMetadata.baseCopyName).path) {
+            try replaceBaseCopy(projectFolder: projectFolder, from: staging)
+            return
+        }
+        let fm = FileManager.default
+        let baseCopy = projectFolder.appendingPathComponent(GitHubRepoMetadata.baseCopyName)
+        for change in appliedChanges {
+            let baseURL = baseCopy.appendingPathComponent(change.path)
+            let remoteURL = staging.appendingPathComponent(change.path)
+            switch change.kind {
+            case .added, .modified:
+                try fm.createDirectory(at: baseURL.deletingLastPathComponent(),
+                                       withIntermediateDirectories: true)
+                if fm.fileExists(atPath: baseURL.path) { try fm.removeItem(at: baseURL) }
+                try fm.copyItem(at: remoteURL, to: baseURL)
+            case .deleted:
+                if fm.fileExists(atPath: baseURL.path) { try fm.removeItem(at: baseURL) }
+            }
+        }
+    }
+
+    nonisolated private static func replaceBaseCopy(projectFolder: URL, from source: URL) throws {
+        let fm = FileManager.default
+        let baseCopy = projectFolder.appendingPathComponent(GitHubRepoMetadata.baseCopyName)
+        if fm.fileExists(atPath: baseCopy.path) { try fm.removeItem(at: baseCopy) }
+        try fm.createDirectory(at: baseCopy, withIntermediateDirectories: true)
+        let items = try fm.contentsOfDirectory(at: source, includingPropertiesForKeys: nil,
+                                               options: [.skipsHiddenFiles])
+        for item in items where item.lastPathComponent != GitHubRepoMetadata.baseCopyName {
+            try fm.copyItem(at: item, to: baseCopy.appendingPathComponent(item.lastPathComponent))
+        }
     }
 
     enum SyncPhase: Equatable {

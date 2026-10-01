@@ -34,7 +34,7 @@ final class RepoSyncModel {
         conflictCount = 0
         syncPhase = .resolving
         do {
-            let (plan, staging) = try await engine.planSync(projectFolder: projectFolder,
+            let (plan, staging, _) = try await engine.planSync(projectFolder: projectFolder,
                                                             metadata: metadata) { [weak self] phase in
                 Task { @MainActor in self?.syncPhase = phase }
             }

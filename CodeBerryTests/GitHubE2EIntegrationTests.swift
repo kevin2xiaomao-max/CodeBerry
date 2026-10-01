@@ -67,7 +67,7 @@ final class GitHubE2EIntegrationTests: XCTestCase {
                       "expected a README in \(metadata.manifest.keys.sorted())")
 
         // Sync right after import: remote HEAD == base → empty plan, no download.
-        let (plan, staging) = try await engine.planSync(projectFolder: projectFolder,
+        let (plan, staging, _) = try await engine.planSync(projectFolder: projectFolder,
                                                         metadata: metadata) { _ in }
         engine.discardStaging(staging)
         XCTAssertTrue(plan.isEmpty, "fresh import must sync to an empty plan")

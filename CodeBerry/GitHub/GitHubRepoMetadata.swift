@@ -5,6 +5,9 @@ import Foundation
 /// the navigator's `skipsHiddenFiles` scan hides it).
 struct GitHubRepoMetadata: Codable, Equatable {
     static let fileName = ".github-repo.json"
+    /// Hidden directory holding the pristine snapshot base (P0-2: patch
+    /// export's `readBase`). Skipped by every `skipsHiddenFiles` scan.
+    static let baseCopyName = ".codeberry-base"
 
     var owner: String
     var repo: String
