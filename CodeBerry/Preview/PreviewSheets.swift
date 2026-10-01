@@ -655,9 +655,10 @@ private struct QueryArrayFillPicker: View {
     }
 
     private func apply(mode: MockValue.QueryArrayMode, count: Int) {
-        mockStore.values[req.propertyName] = MockValue.queryArray(
+        mockStore.setValue(MockValue.queryArray(
             elementType: elementType, mode: mode,
-            count: mode == .empty ? 0 : max(1, count)).previewValue()
+            count: mode == .empty ? 0 : max(1, count)).previewValue(),
+            for: req.propertyName)
     }
 
     var body: some View {

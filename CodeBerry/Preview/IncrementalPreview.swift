@@ -14,9 +14,27 @@ enum IncrementalPreview {
     /// Per-view cache entry. `@unchecked` because PreviewViewNode carries a
     /// button-action closure; entries are confined to the main actor in practice.
     struct Entry: @unchecked Sendable {
-        var bodyHash: Int
+        var fingerprint: Fingerprint
         var nodes: [PreviewViewNode]
         var diagnosticsHash: Int
+    }
+
+    /// 4.0.3 S9 (P0-G): 6-dimensional cache fingerprint. A hit requires ALL
+    /// dimensions to match — a change in any one forces re-evaluation, so
+    /// stale previews are never served.
+    struct Fingerprint: Hashable, Sendable {
+        /// Hash of the target view's body source.
+        var sourceRevision: Int
+        /// S8: the explicit selection (PreviewCandidate.viewName).
+        var targetViewName: String
+        /// PreviewProjectIndex.generation — cross-file dependencies.
+        var indexGeneration: Int
+        /// PreviewMockStore.revision — mock values + active profile.
+        var mockRevision: Int
+        /// PreviewRuntime.version — @State changes.
+        var runtimeRevision: Int
+        /// PreviewFixtureRegistry.revision — generated fixtures.
+        var fixtureRevision: Int
     }
 
     /// The cache. Lives in the canvas as `@State`; keyed by view name.
@@ -68,7 +86,8 @@ enum IncrementalPreview {
                          runtime: PreviewRuntime,
                          projectIndex: PreviewProjectIndex?,
                          mockStore: PreviewMockStore?,
-                         targetView: String? = nil)
+                         targetView: String? = nil,
+                         fixtureRevision: Int = 0)
         -> (nodes: [PreviewViewNode], diagnostics: [PreviewDiagnostic],
             stats: Stats, evaluator: PreviewEvaluator)
     {
@@ -93,8 +112,18 @@ enum IncrementalPreview {
         let identity = cacheKey(doc: doc, fileName: fileName, targetView: targetView)
         let diagHash = diagnosticsHash(of: evaluator.diagnostics)
 
+        // 4.0.3 S9 (P0-G): 6-dimensional fingerprint — every dimension
+        // must match for a hit.
+        let fingerprint = Fingerprint(
+            sourceRevision: identity.bodyHash,
+            targetViewName: identity.viewName,
+            indexGeneration: projectIndex?.generation ?? 0,
+            mockRevision: mockStore?.revision ?? 0,
+            runtimeRevision: runtime.version,
+            fixtureRevision: fixtureRevision)
+
         if let hit = cache.entries[identity.key],
-           hit.bodyHash == identity.bodyHash,
+           hit.fingerprint == fingerprint,
            hit.diagnosticsHash == diagHash {
             cache.hits += 1
             cache.evaluations += 1
@@ -113,7 +142,7 @@ enum IncrementalPreview {
             return ([], evaluator.diagnostics, stats(of: cache), evaluator)
         }
         cache.entries[identity.key] = Entry(
-            bodyHash: identity.bodyHash,
+            fingerprint: fingerprint,
             nodes: nodes,
             diagnosticsHash: diagnosticsHash(of: evaluator.diagnostics))
         cache.evaluations += 1
@@ -129,7 +158,7 @@ enum IncrementalPreview {
     /// `viewOrder.first` by default. An ambiguous (multi-view, no target)
     /// document keys as "#Ambiguous" so a later explicit selection can't
     /// hit a stale entry.
-    static func cacheKey(doc: PreviewDocument, fileName: String, targetView: String? = nil) -> (key: String, bodyHash: Int) {
+    static func cacheKey(doc: PreviewDocument, fileName: String, targetView: String? = nil) -> (key: String, bodyHash: Int, viewName: String) {
         let viewName: String
         if doc.previewBody != nil {
             viewName = "#Preview"

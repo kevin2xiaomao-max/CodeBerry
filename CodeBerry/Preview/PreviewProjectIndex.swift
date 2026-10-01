@@ -129,6 +129,10 @@ final class PreviewProjectIndex {
     /// Surfaced by the acceptance harness and the canvas diagnostics panel.
     private(set) var indexDiagnostics: [PreviewDiagnostic] = []
 
+    /// 4.0.3 S9 (P0-G): bumped whenever index content actually changes.
+    /// One dimension of the incremental-preview cache fingerprint.
+    private(set) var generation = 0
+
     /// Progress UI (§二: "正在建立预览索引").
     var isIndexing = false
     var indexedCount = 0
@@ -195,6 +199,9 @@ final class PreviewProjectIndex {
         }
         if rebuilt { rebuildLookup() }
         indexedCount = live.count
+        // 4.0.3 S9 (P0-G): bump the generation only when index content
+        // actually changed — the cache fingerprint's index dimension.
+        if rebuilt { generation += 1 }
     }
 
     // MARK: - Background rebuild (cold path)
@@ -267,6 +274,8 @@ final class PreviewProjectIndex {
         }
         if rebuilt { rebuildLookup() }
         indexedCount = live.count
+        // 4.0.3 S9 (P0-G): background merge also bumps the generation.
+        if rebuilt { generation += 1 }
     }
 
     /// Parse one file into the index. Files with syntax errors keep their

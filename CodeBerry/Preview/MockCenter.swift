@@ -184,8 +184,8 @@ final class MockCenter {
         store.reset()
         for (key, value) in activeProfile?.values ?? [:] {
             let property = key.components(separatedBy: ".").last ?? key
-            store.values[property] = value.previewValue()
-            store.values[key] = value.previewValue()
+            store.setValue(value.previewValue(), for: property)
+            store.setValue(value.previewValue(), for: key)
         }
     }
 
@@ -282,7 +282,7 @@ final class MockCenter {
                                       into store: PreviewMockStore) {
         for req in requirements where store.value(for: req.propertyName) == nil {
             if let auto = typeAwareDefault(for: req) {
-                store.values[req.propertyName] = auto.previewValue()
+                store.setValue(auto.previewValue(), for: req.propertyName)
             }
         }
     }
