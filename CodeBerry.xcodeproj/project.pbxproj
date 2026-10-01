@@ -13,6 +13,12 @@
 		CB300000000000000000000F /* SwiftSyntax in Frameworks */ = {isa = PBXBuildFile; productRef = CB300000000000000000000C /* SwiftSyntax */; };
 		CB3000000000000000000010 /* SwiftParser in Frameworks */ = {isa = PBXBuildFile; productRef = CB300000000000000000000D /* SwiftParser */; };
 		CB3000000000000000000011 /* SwiftOperators in Frameworks */ = {isa = PBXBuildFile; productRef = CB300000000000000000000E /* SwiftOperators */; };
+		BC0000000000000000000022 /* Runestone in Frameworks */ = {isa = PBXBuildFile; productRef = BC0000000000000000000021 /* Runestone */; };
+		BC0000000000000000000025 /* TreeSitterSwiftRunestone in Frameworks */ = {isa = PBXBuildFile; productRef = BC0000000000000000000024 /* TreeSitterSwiftRunestone */; };
+		BC0000000000000000000028 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = BC0000000000000000000027 /* ZIPFoundation */; };
+		CB3000000000000000000013 /* Runestone in Frameworks */ = {isa = PBXBuildFile; productRef = CB3000000000000000000012 /* Runestone */; };
+		CB3000000000000000000015 /* TreeSitterSwiftRunestone in Frameworks */ = {isa = PBXBuildFile; productRef = CB3000000000000000000014 /* TreeSitterSwiftRunestone */; };
+		CB3000000000000000000017 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = CB3000000000000000000016 /* ZIPFoundation */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -51,6 +57,9 @@
 				BC0000000000000000000016 /* SwiftSyntax in Frameworks */,
 				BC0000000000000000000017 /* SwiftParser in Frameworks */,
 				BC0000000000000000000019 /* SwiftOperators in Frameworks */,
+				BC0000000000000000000022 /* Runestone in Frameworks */,
+				BC0000000000000000000025 /* TreeSitterSwiftRunestone in Frameworks */,
+				BC0000000000000000000028 /* ZIPFoundation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -61,6 +70,9 @@
 				CB300000000000000000000F /* SwiftSyntax in Frameworks */,
 				CB3000000000000000000010 /* SwiftParser in Frameworks */,
 				CB3000000000000000000011 /* SwiftOperators in Frameworks */,
+				CB3000000000000000000013 /* Runestone in Frameworks */,
+				CB3000000000000000000015 /* TreeSitterSwiftRunestone in Frameworks */,
+				CB3000000000000000000017 /* ZIPFoundation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -116,6 +128,9 @@
 				BC0000000000000000000014 /* SwiftSyntax */,
 				BC0000000000000000000015 /* SwiftParser */,
 				BC0000000000000000000018 /* SwiftOperators */,
+				BC0000000000000000000021 /* Runestone */,
+				BC0000000000000000000024 /* TreeSitterSwiftRunestone */,
+				BC0000000000000000000027 /* ZIPFoundation */,
 			);
 			productName = CodeBerry;
 			productReference = BC0000000000000000000001 /* CodeBerry.app */;
@@ -142,6 +157,9 @@
 				CB300000000000000000000C /* SwiftSyntax */,
 				CB300000000000000000000D /* SwiftParser */,
 				CB300000000000000000000E /* SwiftOperators */,
+				CB3000000000000000000012 /* Runestone */,
+				CB3000000000000000000014 /* TreeSitterSwiftRunestone */,
+				CB3000000000000000000016 /* ZIPFoundation */,
 			);
 			productName = CodeBerryTests;
 			productReference = CB3000000000000000000008 /* CodeBerryTests.xctest */;
@@ -175,6 +193,9 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				BC0000000000000000000013 /* XCRemoteSwiftPackageReference "swift-syntax" */,
+				BC0000000000000000000020 /* XCRemoteSwiftPackageReference "Runestone" */,
+				BC0000000000000000000023 /* XCRemoteSwiftPackageReference "TreeSitterLanguages" */,
+				BC0000000000000000000026 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = BC0000000000000000000005 /* Products */;
@@ -422,6 +443,30 @@
 				minimumVersion = 601.0.0;
 			};
 		};
+		BC0000000000000000000020 /* XCRemoteSwiftPackageReference "Runestone" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/simonbs/Runestone";
+			requirement = {
+				kind = exactVersion;
+				version = 0.5.2;
+			};
+		};
+		BC0000000000000000000023 /* XCRemoteSwiftPackageReference "TreeSitterLanguages" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/simonbs/TreeSitterLanguages";
+			requirement = {
+				kind = exactVersion;
+				version = 0.1.10;
+			};
+		};
+		BC0000000000000000000026 /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/weichsel/ZIPFoundation.git";
+			requirement = {
+				kind = exactVersion;
+				version = 0.9.20;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -454,6 +499,36 @@
 			isa = XCSwiftPackageProductDependency;
 			package = BC0000000000000000000013 /* XCRemoteSwiftPackageReference "swift-syntax" */;
 			productName = SwiftOperators;
+		};
+		BC0000000000000000000021 /* Runestone */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BC0000000000000000000020 /* XCRemoteSwiftPackageReference "Runestone" */;
+			productName = Runestone;
+		};
+		BC0000000000000000000024 /* TreeSitterSwiftRunestone */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BC0000000000000000000023 /* XCRemoteSwiftPackageReference "TreeSitterLanguages" */;
+			productName = TreeSitterSwiftRunestone;
+		};
+		BC0000000000000000000027 /* ZIPFoundation */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BC0000000000000000000026 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
+			productName = ZIPFoundation;
+		};
+		CB3000000000000000000012 /* Runestone */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BC0000000000000000000020 /* XCRemoteSwiftPackageReference "Runestone" */;
+			productName = Runestone;
+		};
+		CB3000000000000000000014 /* TreeSitterSwiftRunestone */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BC0000000000000000000023 /* XCRemoteSwiftPackageReference "TreeSitterLanguages" */;
+			productName = TreeSitterSwiftRunestone;
+		};
+		CB3000000000000000000016 /* ZIPFoundation */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BC0000000000000000000026 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
+			productName = ZIPFoundation;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
