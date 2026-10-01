@@ -48,6 +48,8 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+
+                GitHubTokenSettingsView()
             }
             .navigationTitle(l10n.t(.settings))
             .toolbar {

@@ -202,6 +202,88 @@ enum L10nKey: String, CaseIterable {
     case diagMockNeeded
     case diagNoMockValue
 
+    // MARK: GitHub Direct (§8/§9, 4.0 M1)
+    case githubImportTitle       // 从 GitHub 导入
+    case githubOpenFromGitHub    // 从 GitHub 打开
+    case githubURLLabel          // 仓库链接
+    case githubURLPlaceholder    // https://github.com/owner/repo
+    case githubParseHint         // 支持仓库主页 / tree / blob 链接，也支持 git@ SSH 形式
+    case githubRepoCard          // 仓库
+    case githubPrivateBadge      // 私有
+    case githubPublicBadge       // 公开
+    case githubRefSection        // 版本
+    case githubRefBranch         // 分支
+    case githubRefTag            // 标签
+    case githubRefCommit         // 提交
+    case githubDefaultBranchTag  // 默认
+    case githubCommitSHAPlaceholder // 完整 commit SHA
+    case githubImportAction      // 导入
+    case githubImporting         // 正在导入…
+    case githubDownloading       // 正在下载…
+    case githubExtracting        // 正在解压…
+    case githubImportDone        // 导入完成
+    case githubRecentTitle       // 最近导入
+    case githubNoRecent          // 还没有从 GitHub 导入过仓库
+    case githubSyncAction        // 同步 GitHub
+    case githubSyncing           // 正在同步…
+    case githubSyncedUpToDate    // 已是最新
+    case githubSyncApplied       // 已更新 %d 个文件
+    case githubSyncConflicts     // %d 个文件存在冲突，已保留你的本地修改
+    case githubSyncFailed        // 同步失败
+    case githubLastSync          // 上次同步：%@
+    case githubNeverSynced       // 尚未同步
+    case githubTokenSection      // GitHub 令牌
+    case githubTokenDesc         // 用于访问私有仓库、提高 API 配额。只保存在钥匙串中。
+    case githubTokenPlaceholder  // ghp_… / github_pat_…
+    case githubTokenSaved        // 令牌已保存到钥匙串
+    case githubTokenDeleted      // 令牌已删除
+    case githubTokenSet          // 已设置
+    case githubTokenNotSet       // 未设置
+    case githubSaveToken         // 保存令牌
+    case githubDeleteToken       // 删除令牌
+    case githubOpenFileAfterImport // 导入后打开的文件不存在，已打开仓库根目录
+    // GitHub errors
+    case errGithubInvalidURL     // 不是有效的 GitHub 仓库链接
+    case errGithubNetwork        // 网络错误：%@
+    case errGithubHTTP           // GitHub 返回错误 %d：%@
+    case errGithubRateLimited    // API 配额已用完，%@ 后恢复（可添加令牌提高配额）
+    case errGithubRateLimitedUnknown // API 配额已用完（可添加令牌提高配额）
+    case errGithubNotFound       // 找不到仓库 %@
+    case errGithubUnauthorized   // 令牌无效或已过期
+    case errGithubDecoding       // 解析 GitHub 返回数据失败
+    case errGithubCancelled      // 已取消
+    case errGithubNoToken        // 未设置 GitHub 令牌
+    case errGithubTokenEmpty     // 令牌不能为空
+    case errGithubTokenFormat    // 令牌格式不正确（应为 ghp_… 或 github_pat_…）
+    case errArchiveUnreadable    // 无法读取下载的压缩包
+    case errArchiveTooManyEntries // 压缩包条目过多（%d），已拒绝解压
+    case errArchiveTooLarge      // 压缩包解压后超过 %@，已拒绝解压
+    case errArchiveSymlink       // 压缩包包含符号链接 %@，已拒绝解压
+    case errArchiveTraversal     // 压缩包包含非法路径 %@，已拒绝解压
+    case errArchiveAbsolutePath  // 压缩包包含绝对路径 %@，已拒绝解压
+
+    // MARK: - M2: Editor
+    case quickOpenTitle         // 快速打开
+    case quickOpenFiles         // 文件
+    case quickOpenSymbols       // 符号
+    case quickOpenCommands      // 命令
+    case quickOpenSearchHint    // 搜索文件、符号、命令
+    case cmdProjectSearch       // 在项目中搜索
+    case cmdJumpToDefinition    // 跳转到定义
+    case cmdFindReferences      // 查找引用
+    case cmdRebuildIndex        // 重建符号索引
+    case cmdShowDiagnostics     // 查看诊断信息
+    case projectSearchTitle     // 项目搜索
+    case projectSearchHint      // 在项目中搜索
+    case projectSearchCase      // 区分大小写
+    case diagnosticsTitle       // 诊断
+    case diagnosticsEmpty       // 当前文件没有语法错误
+    case diagnosticsNone        // 无诊断信息
+    case referencesTitle        // 引用：%@
+    case referencesEmpty        // 无引用
+    case referencesEmptyDesc    // 在项目中没有找到 %@ 的其他引用
+    case symbolLineInfo         // %@ · %@ · 行 %d
+
     // MARK: Misc
     case fileLine              // %@ · 第 %d 行
     case apiName
@@ -424,6 +506,87 @@ final class L10nService: @unchecked Sendable {
         .diagModifierIgnored: ("修饰符 .%@ 暂不支持（已忽略）", "Modifier '.%@' not supported (ignored)."),
         .diagMockNeeded: ("“%@”需要 Mock 数据才能预览", "\"%@\" needs mock data to preview."),
         .diagNoMockValue: ("缺少 Mock 值：%@", "Missing mock value: %@"),
+
+        // GitHub Direct (4.0 M1)
+        .githubImportTitle: ("从 GitHub 导入", "Import from GitHub"),
+        .githubOpenFromGitHub: ("从 GitHub 打开", "Open from GitHub"),
+        .githubURLLabel: ("仓库链接", "Repository URL"),
+        .githubURLPlaceholder: ("https://github.com/owner/repo", "https://github.com/owner/repo"),
+        .githubParseHint: ("支持仓库主页 / tree / blob 链接，也支持 git@ SSH 形式", "Supports repo home / tree / blob links, and git@ SSH forms"),
+        .githubRepoCard: ("仓库", "Repository"),
+        .githubPrivateBadge: ("私有", "Private"),
+        .githubPublicBadge: ("公开", "Public"),
+        .githubRefSection: ("版本", "Version"),
+        .githubRefBranch: ("分支", "Branch"),
+        .githubRefTag: ("标签", "Tag"),
+        .githubRefCommit: ("提交", "Commit"),
+        .githubDefaultBranchTag: ("默认", "Default"),
+        .githubCommitSHAPlaceholder: ("完整 commit SHA", "Full commit SHA"),
+        .githubImportAction: ("导入", "Import"),
+        .githubImporting: ("正在导入…", "Importing…"),
+        .githubDownloading: ("正在下载…", "Downloading…"),
+        .githubExtracting: ("正在解压…", "Extracting…"),
+        .githubImportDone: ("导入完成", "Import complete"),
+        .githubRecentTitle: ("最近导入", "Recently imported"),
+        .githubNoRecent: ("还没有从 GitHub 导入过仓库", "No GitHub imports yet"),
+        .githubSyncAction: ("同步 GitHub", "Sync GitHub"),
+        .githubSyncing: ("正在同步…", "Syncing…"),
+        .githubSyncedUpToDate: ("已是最新", "Already up to date"),
+        .githubSyncApplied: ("已更新 %d 个文件", "Updated %d files"),
+        .githubSyncConflicts: ("%d 个文件存在冲突，已保留你的本地修改", "%d files have conflicts; your local changes were kept"),
+        .githubSyncFailed: ("同步失败", "Sync failed"),
+        .githubLastSync: ("上次同步：%@", "Last sync: %@"),
+        .githubNeverSynced: ("尚未同步", "Never synced"),
+        .githubTokenSection: ("GitHub 令牌", "GitHub Token"),
+        .githubTokenDesc: ("用于访问私有仓库、提高 API 配额。只保存在钥匙串中。", "For private repos and higher API quotas. Stored in the Keychain only."),
+        .githubTokenPlaceholder: ("ghp_… / github_pat_…", "ghp_… / github_pat_…"),
+        .githubTokenSaved: ("令牌已保存到钥匙串", "Token saved to the Keychain"),
+        .githubTokenDeleted: ("令牌已删除", "Token deleted"),
+        .githubTokenSet: ("已设置", "Set"),
+        .githubTokenNotSet: ("未设置", "Not set"),
+        .githubSaveToken: ("保存令牌", "Save Token"),
+        .githubDeleteToken: ("删除令牌", "Delete Token"),
+        .githubOpenFileAfterImport: ("导入后打开的文件不存在，已打开仓库根目录", "The linked file wasn't in the snapshot; opened the repo root"),
+        .errGithubInvalidURL: ("不是有效的 GitHub 仓库链接", "Not a valid GitHub repository URL"),
+        .errGithubNetwork: ("网络错误：%@", "Network error: %@"),
+        .errGithubHTTP: ("GitHub 返回错误 %d：%@", "GitHub error %d: %@"),
+        .errGithubRateLimited: ("API 配额已用完，%@ 后恢复（可添加令牌提高配额）", "API quota exhausted, resets %@ (add a token for a higher quota)"),
+        .errGithubRateLimitedUnknown: ("API 配额已用完（可添加令牌提高配额）", "API quota exhausted (add a token for a higher quota)"),
+        .errGithubNotFound: ("找不到仓库 %@", "Repository not found: %@"),
+        .errGithubUnauthorized: ("令牌无效或已过期", "Token is invalid or expired"),
+        .errGithubDecoding: ("解析 GitHub 返回数据失败", "Failed to parse GitHub response"),
+        .errGithubCancelled: ("已取消", "Cancelled"),
+        .errGithubNoToken: ("未设置 GitHub 令牌", "No GitHub token set"),
+        .errGithubTokenEmpty: ("令牌不能为空", "Token must not be empty"),
+        .errGithubTokenFormat: ("令牌格式不正确（应为 ghp_… 或 github_pat_…）", "Unrecognized token format (expected ghp_… or github_pat_…)"),
+        .errArchiveUnreadable: ("无法读取下载的压缩包", "Cannot read the downloaded archive"),
+        .errArchiveTooManyEntries: ("压缩包条目过多（%@），已拒绝解压", "Archive has too many entries (%@); extraction refused"),
+        .errArchiveTooLarge: ("压缩包解压后超过 %@，已拒绝解压", "Archive would extract beyond %@; extraction refused"),
+        .errArchiveSymlink: ("压缩包包含符号链接 %@，已拒绝解压", "Archive contains symlink %@; extraction refused"),
+        .errArchiveTraversal: ("压缩包包含非法路径 %@，已拒绝解压", "Archive contains illegal path %@; extraction refused"),
+        .errArchiveAbsolutePath: ("压缩包包含绝对路径 %@，已拒绝解压", "Archive contains absolute path %@; extraction refused"),
+
+        // M2: Editor
+        .quickOpenTitle: ("快速打开", "Quick Open"),
+        .quickOpenFiles: ("文件", "Files"),
+        .quickOpenSymbols: ("符号", "Symbols"),
+        .quickOpenCommands: ("命令", "Commands"),
+        .quickOpenSearchHint: ("搜索文件、符号、命令", "Search files, symbols, commands"),
+        .cmdProjectSearch: ("在项目中搜索", "Search in Project"),
+        .cmdJumpToDefinition: ("跳转到定义", "Jump to Definition"),
+        .cmdFindReferences: ("查找引用", "Find References"),
+        .cmdRebuildIndex: ("重建符号索引", "Rebuild Symbol Index"),
+        .cmdShowDiagnostics: ("查看诊断信息", "Show Diagnostics"),
+        .projectSearchTitle: ("项目搜索", "Project Search"),
+        .projectSearchHint: ("在项目中搜索", "Search in project"),
+        .projectSearchCase: ("区分大小写", "Case sensitive"),
+        .diagnosticsTitle: ("诊断", "Diagnostics"),
+        .diagnosticsEmpty: ("当前文件没有语法错误", "No syntax errors in this file"),
+        .diagnosticsNone: ("无诊断信息", "No diagnostics"),
+        .referencesTitle: ("引用：%@", "References: %@"),
+        .referencesEmpty: ("无引用", "No references"),
+        .referencesEmptyDesc: ("在项目中没有找到 %@ 的其他引用", "No other references to %@ found in the project"),
+        .symbolLineInfo: ("%1$@ · %2$@ · 行 %3$d", "%1$@ · %2$@ · line %3$d"),
 
         // Misc
         .fileLine: ("%1$@ · 第 %2$d 行", "%1$@ · line %2$d"),

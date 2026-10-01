@@ -18,16 +18,19 @@ struct FileNavigatorView: View {
     @Bindable private var l10n = L10nService.shared
 
     var body: some View {
-        List(selection: $store.selectedPath) {
-            if store.tree.isEmpty {
-                ContentUnavailableView(l10n.t(.files),
-                                       systemImage: "folder",
-                                       description: Text(l10n.t(.navigatorEmptyDesc)))
-            } else {
-                outline(store.tree)
+        VStack(spacing: 0) {
+            RepoSyncBar(store: store)
+            List(selection: $store.selectedPath) {
+                if store.tree.isEmpty {
+                    ContentUnavailableView(l10n.t(.files),
+                                           systemImage: "folder",
+                                           description: Text(l10n.t(.navigatorEmptyDesc)))
+                } else {
+                    outline(store.tree)
+                }
             }
+            .listStyle(.sidebar)
         }
-        .listStyle(.sidebar)
         .navigationTitle(store.currentProject ?? "CodeBerry")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

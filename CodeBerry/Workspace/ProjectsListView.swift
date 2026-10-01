@@ -11,6 +11,7 @@ struct ProjectsListView: View {
     @State private var renameTarget: ProjectInfo?
     @State private var renameText = ""
     @State private var deleteTarget: ProjectInfo?
+    @State private var showGitHubImport = false
     @Bindable private var l10n = L10nService.shared
 
     var body: some View {
@@ -39,6 +40,9 @@ struct ProjectsListView: View {
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Menu {
+                    Button(l10n.t(.githubOpenFromGitHub), systemImage: "arrow.down.circle") {
+                        showGitHubImport = true
+                    }
                     Button(l10n.t(.settings), systemImage: "gearshape") {
                         onShowSettings()
                     }
@@ -91,6 +95,22 @@ struct ProjectsListView: View {
             Button(l10n.t(.cancel), role: .cancel) { deleteTarget = nil }
         } message: {
             Text(l10n.t(.deleteProjectMessage))
+        }
+        .sheet(isPresented: $showGitHubImport) {
+            GitHubImportView(store: store) { folder, openFile in
+                store.refresh()
+                store.openProject(folder)
+                if let openFile {
+                    // Open the /blob/ file the URL pointed at, when it exists.
+                    let path = "\(folder)/\(openFile)"
+                    let url = store.rootURL.appendingPathComponent(path)
+                    var isDir: ObjCBool = false
+                    if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),
+                       !isDir.boolValue {
+                        store.openFile(path)
+                    }
+                }
+            }
         }
     }
 
