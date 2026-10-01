@@ -1,18 +1,34 @@
+import Runestone
 import SwiftUI
 
-/// The editor area: open-file tabs (Xcode style), the code editor, and a
-/// keyboard bar that flips between symbol keys and autocomplete suggestions.
+/// The editor area: open-file tabs (Xcode style), the Runestone code editor,
+/// and the Coding Bar above the keyboard.
+///
+/// M2: Runestone (Tree-sitter highlighting, line numbers, find/replace),
+/// Coding Bar with context-aware suggestions, Quick Open, project search,
+/// symbol index, local completion, Jump to Definition / Find References,
+/// inline diagnostics.
 struct EditorPaneView: View {
     @Bindable var store: WorkspaceStore
 
     @State private var controller = EditorController()
-    @State private var suggestions: [String] = []
+    @State private var suggestions: [LocalCompletionEngine.Suggestion] = []
     @State private var showPreview = true
     /// Editor/preview split, as the preview's share. Persisted; resized by
     /// dragging the canvas's Preview bar.
     @AppStorage("previewSplitFraction") private var previewFraction = 0.45
     @State private var dragBaseFraction: Double?
-    private let autocomplete = AutocompleteEngine()
+    @State private var navigateToLine: Int?
+    @State private var diagnostics: [CodeDiagnostic] = []
+    @State private var diagnosticRanges: [HighlightedRange] = []
+    @State private var diagnosticTask: Task<Void, Never>?
+    @State private var showingQuickOpen = false
+    @State private var quickOpenQuery = ""
+    @State private var showingDiagnostics = false
+    @State private var showingProjectSearch = false
+    @State private var showingReferences = false
+    @State private var referenceSymbolName = ""
+    @State private var referenceResults: [ReferenceHit] = []
 
     var body: some View {
         if let path = store.openFilePath {
@@ -44,16 +60,82 @@ struct EditorPaneView: View {
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                EditorAccessoryBar(
+                CodingBarView(
                     suggestions: suggestions,
-                    onSuggestion: { word in
-                        controller.applyCompletion(word)
-                        suggestions = []
-                    },
-                    onSymbol: { symbol in
-                        controller.insert(symbol == "⇥" ? "    " : symbol)
+                    onSuggestion: applySuggestion,
+                    onKey: { key in
+                        switch key {
+                        case .left: controller.moveCaret(by: -1)
+                        case .right: controller.moveCaret(by: 1)
+                        default:
+                            if let text = key.insertText { controller.insert(text) }
+                        }
+                        refreshSuggestions()
                     },
                     onDismissKeyboard: { controller.dismissKeyboard() }
+                )
+            }
+            .sheet(isPresented: $showingQuickOpen) {
+                QuickOpenView(
+                    query: $quickOpenQuery,
+                    files: store.allProjectFiles(),
+                    symbolIndex: store.symbolIndex,
+                    commands: quickCommands,
+                    onSelectFile: { file in
+                        showingQuickOpen = false
+                        if let wsPath = store.workspacePath(ofProjectRelative: file) {
+                            store.openFile(wsPath)
+                        }
+                    },
+                    onSelectSymbol: { sym in
+                        showingQuickOpen = false
+                        if let wsPath = store.workspacePath(ofProjectRelative: sym.filePath) {
+                            store.openFile(wsPath)
+                            navigateToLine = sym.line
+                        }
+                    },
+                    onSelectCommand: { cmd in
+                        showingQuickOpen = false
+                        runCommand(cmd)
+                    },
+                    onClose: { showingQuickOpen = false }
+                )
+            }
+            .sheet(isPresented: $showingDiagnostics) {
+                DiagnosticsListView(
+                    diagnostics: diagnostics,
+                    onSelect: { diag in
+                        showingDiagnostics = false
+                        navigateToLine = diag.line
+                    },
+                    onClose: { showingDiagnostics = false }
+                )
+            }
+            .sheet(isPresented: $showingProjectSearch) {
+                ProjectSearchView(
+                    projectRoot: store.previewProjectRoot(),
+                    onSelect: { hit in
+                        showingProjectSearch = false
+                        if let wsPath = store.workspacePath(ofProjectRelative: hit.filePath) {
+                            store.openFile(wsPath)
+                            navigateToLine = hit.line
+                        }
+                    },
+                    onClose: { showingProjectSearch = false }
+                )
+            }
+            .sheet(isPresented: $showingReferences) {
+                ReferencesListView(
+                    symbolName: referenceSymbolName,
+                    results: referenceResults,
+                    onSelect: { filePath, line in
+                        showingReferences = false
+                        if let wsPath = store.workspacePath(ofProjectRelative: filePath) {
+                            store.openFile(wsPath)
+                            navigateToLine = line
+                        }
+                    },
+                    onClose: { showingReferences = false }
                 )
             }
         } else {
@@ -64,6 +146,134 @@ struct EditorPaneView: View {
             }
         }
     }
+
+    // MARK: - Editor
+
+    private func editor(_ path: String) -> some View {
+        RunestoneEditorView(
+            text: $store.editorText,
+            fileID: path,
+            controller: controller,
+            diagnosticRanges: diagnosticRanges,
+            navigateToLine: $navigateToLine,
+            onCaretWordChange: { _ in refreshSuggestions() },
+            onTextChange: {
+                refreshSuggestions()
+                scheduleDiagnostics()
+            }
+        )
+        .ignoresSafeArea(.container, edges: .bottom)
+        .onAppear { scheduleDiagnostics() }
+    }
+
+    // MARK: - Completion
+
+    private func refreshSuggestions() {
+        let before = controller.textBeforeCaret
+        let word = caretWord(before: before)
+        suggestions = LocalCompletionEngine.suggestions(
+            prefix: word, textBeforeCaret: before, symbolIndex: store.symbolIndex)
+    }
+
+    private func caretWord(before textBeforeCaret: String) -> String {
+        var word = ""
+        for ch in textBeforeCaret.reversed() {
+            if ch.isLetter || ch.isNumber || ch == "_" { word.insert(ch, at: word.startIndex) }
+            else { break }
+        }
+        return word
+    }
+
+    private func applySuggestion(_ s: LocalCompletionEngine.Suggestion) {
+        if s.caretBacktrack > 0 {
+            controller.insert(s.insert)
+            controller.moveCaret(by: -s.caretBacktrack)
+        } else {
+            let word = caretWord(before: controller.textBeforeCaret)
+            if !word.isEmpty, s.insert.lowercased().hasPrefix(word.lowercased()) {
+                // Replace the typed prefix (identifier completion).
+                controller.applyCompletion(s.insert)
+            } else {
+                controller.insert(s.insert)
+            }
+        }
+        suggestions = []
+    }
+
+    // MARK: - Diagnostics
+
+    private func scheduleDiagnostics() {
+        diagnosticTask?.cancel()
+        let text = store.editorText
+        let isSwift = store.openFilePath?.hasSuffix(".swift") ?? false
+        diagnosticTask = Task {
+            try? await Task.sleep(for: .milliseconds(700))
+            guard !Task.isCancelled else { return }
+            let diags = await Task.detached {
+                isSwift ? InlineDiagnosticsEngine.diagnose(source: text) : []
+            }.value
+            guard !Task.isCancelled else { return }
+            // highlightRanges returns Runestone's non-Sendable HighlightedRange:
+            // compute on the main actor instead of crossing isolation.
+            await MainActor.run {
+                diagnostics = diags
+                diagnosticRanges = InlineDiagnosticsEngine.highlightRanges(for: diags, in: text)
+            }
+        }
+    }
+
+    // MARK: - Navigation
+
+    private var caretIdentifier: String? {
+        guard let offset = controller.caretOffset else { return nil }
+        return CodeNavigation.identifier(at: offset, in: store.editorText)
+    }
+
+    private func jumpToDefinition() {
+        guard let name = caretIdentifier,
+              let path = store.openFilePath,
+              let rel = store.projectRelativePath(of: path),
+              let sym = store.symbolIndex.definition(of: name, inFile: rel),
+              let wsPath = store.workspacePath(ofProjectRelative: sym.filePath) else { return }
+        store.openFile(wsPath)
+        navigateToLine = sym.line
+    }
+
+    private func findReferences() {
+        guard let name = caretIdentifier,
+              let path = store.openFilePath,
+              let rel = store.projectRelativePath(of: path),
+              let sym = store.symbolIndex.definition(of: name, inFile: rel) else { return }
+        referenceSymbolName = name
+        referenceResults = store.symbolIndex.references(
+            of: sym, fileContents: store.swiftFileContents())
+        showingReferences = true
+    }
+
+    // MARK: - Quick Open commands
+
+    private var quickCommands: [QuickCommand] {
+        [
+            QuickCommand(id: "project-search", title: L10nService.shared.t(.cmdProjectSearch), icon: "magnifyingglass"),
+            QuickCommand(id: "jump-definition", title: L10nService.shared.t(.cmdJumpToDefinition), icon: "arrow.up.right.circle"),
+            QuickCommand(id: "find-references", title: L10nService.shared.t(.cmdFindReferences), icon: "list.bullet"),
+            QuickCommand(id: "reindex", title: L10nService.shared.t(.cmdRebuildIndex), icon: "arrow.clockwise"),
+            QuickCommand(id: "diagnostics", title: L10nService.shared.t(.cmdShowDiagnostics), icon: "exclamationmark.triangle"),
+        ]
+    }
+
+    private func runCommand(_ cmd: QuickCommand) {
+        switch cmd.id {
+        case "project-search": showingProjectSearch = true
+        case "jump-definition": jumpToDefinition()
+        case "find-references": findReferences()
+        case "reindex": store.rebuildSymbolIndex()
+        case "diagnostics": showingDiagnostics = true
+        default: break
+        }
+    }
+
+    // MARK: - Canvas / tabs
 
     private func canvas(axis: Axis, total: CGFloat, path: String) -> some View {
         PreviewCanvasView(source: store.editorText,
@@ -83,15 +293,6 @@ struct EditorPaneView: View {
                           store: store)
     }
 
-    private func editor(_ path: String) -> some View {
-        CodeEditorView(text: $store.editorText,
-                       fileID: path,
-                       controller: controller) { prefix in
-            suggestions = autocomplete.suggestions(prefix: prefix, in: store.editorText)
-        }
-        .ignoresSafeArea(.container, edges: .bottom)
-    }
-
     private var tabBar: some View {
         HStack(spacing: 0) {
             ScrollView(.horizontal, showsIndicators: false) {
@@ -103,6 +304,26 @@ struct EditorPaneView: View {
             }
             Spacer(minLength: 8)
             Divider().frame(height: 20)
+            Button {
+                showingQuickOpen = true
+            } label: {
+                Image(systemName: "command")
+            }
+            .padding(.horizontal, 8)
+            Button {
+                showingDiagnostics = true
+            } label: {
+                Image(systemName: diagnostics.contains(where: { !$0.isWarning })
+                      ? "exclamationmark.octagon.fill" : "checkmark.circle")
+                    .foregroundStyle(diagnostics.contains(where: { !$0.isWarning }) ? .red : .secondary)
+            }
+            .padding(.horizontal, 8)
+            Button {
+                jumpToDefinition()
+            } label: {
+                Image(systemName: "arrow.up.right.circle")
+            }
+            .padding(.horizontal, 8)
             Button {
                 withAnimation(.snappy) { showPreview.toggle() }
             } label: {
@@ -143,66 +364,5 @@ struct EditorPaneView: View {
         .background(isActive ? Color.primary.opacity(0.07) : .clear)
         .contentShape(Rectangle())
         .onTapGesture { store.openFile(tab) }
-    }
-}
-
-/// Sits above the keyboard: completion suggestions while typing an
-/// identifier, code symbol keys otherwise.
-struct EditorAccessoryBar: View {
-    let suggestions: [String]
-    let onSuggestion: (String) -> Void
-    let onSymbol: (String) -> Void
-    let onDismissKeyboard: () -> Void
-
-    private static let symbols = ["⇥", "{", "}", "(", ")", "[", "]", "\"", ".",
-                                  ":", ";", ",", "=", "+", "-", "*", "/", "<",
-                                  ">", "!", "?", "&", "|", "_", "->"]
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    if suggestions.isEmpty {
-                        ForEach(Self.symbols, id: \.self) { symbol in
-                            Button {
-                                onSymbol(symbol)
-                            } label: {
-                                Text(symbol)
-                                    .font(.system(size: 15, design: .monospaced))
-                                    .frame(minWidth: 24)
-                            }
-                            .buttonStyle(.bordered)
-                            .buttonBorderShape(.roundedRectangle(radius: 6))
-                            .controlSize(.small)
-                        }
-                    } else {
-                        ForEach(suggestions, id: \.self) { word in
-                            Button {
-                                onSuggestion(word)
-                            } label: {
-                                Text(word)
-                                    .font(.system(size: 14, design: .monospaced))
-                                    .lineLimit(1)
-                            }
-                            .buttonStyle(.bordered)
-                            .buttonBorderShape(.roundedRectangle(radius: 6))
-                            .controlSize(.small)
-                            .tint(.accentColor)
-                        }
-                    }
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-            }
-            Divider().frame(height: 22)
-            Button {
-                onDismissKeyboard()
-            } label: {
-                Image(systemName: "keyboard.chevron.compact.down")
-            }
-            .padding(.horizontal, 10)
-        }
-        .frame(height: 42)
-        .background(.bar)
     }
 }

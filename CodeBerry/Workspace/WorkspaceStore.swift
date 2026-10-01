@@ -38,6 +38,9 @@ final class WorkspaceStore {
     private(set) var openFilePath: String?
     private(set) var isDirty = false
     var lastError: String?
+    /// Project-wide Swift symbol index (M2: Quick Open / completion /
+    /// Jump to Definition). Rebuilt on project open, updated on save.
+    let symbolIndex = SymbolIndex()
 
     var editorText = "" {
         didSet {
@@ -60,6 +63,7 @@ final class WorkspaceStore {
            isDirectory(lastProject) {
             currentProject = lastProject
             refresh()
+            rebuildSymbolIndex()
             if let lastFile = UserDefaults.standard.string(forKey: Self.lastOpenFileKey),
                lastFile.hasPrefix(lastProject + "/") {
                 openFile(lastFile)
@@ -112,6 +116,7 @@ final class WorkspaceStore {
         clearEditorState()
         currentProject = name
         refresh()
+        rebuildSymbolIndex()
         UserDefaults.standard.set(name, forKey: Self.lastProjectKey)
     }
 
@@ -260,9 +265,72 @@ final class WorkspaceStore {
         do {
             try workspace.write(path, content: editorText)
             isDirty = false
+            if path.hasSuffix(".swift"), let rel = projectRelativePath(of: path) {
+                symbolIndex.updateFile(relativePath: rel, content: editorText)
+            }
         } catch {
             lastError = L10nService.shared.t(.errSaveFailed, error.localizedDescription)
         }
+    }
+
+    // MARK: - M2: Symbol index / Quick Open / navigation
+
+    /// Project-relative path for a workspace-relative path, e.g.
+    /// "MyApp/Sources/A.swift" -> "Sources/A.swift".
+    func projectRelativePath(of workspacePath: String) -> String? {
+        guard let project = currentProject else { return nil }
+        let prefix = project + "/"
+        guard workspacePath.hasPrefix(prefix) else { return nil }
+        return String(workspacePath.dropFirst(prefix.count))
+    }
+
+    /// Workspace-relative path for a project-relative path.
+    func workspacePath(ofProjectRelative relative: String) -> String? {
+        guard let project = currentProject else { return nil }
+        return project + "/" + relative
+    }
+
+    /// Full rebuild of the symbol index over the open project.
+    func rebuildSymbolIndex() {
+        guard let root = previewProjectRoot() else { return }
+        symbolIndex.rebuild(projectRoot: root)
+    }
+
+    /// All files in the open project, project-relative (Quick Open).
+    func allProjectFiles() -> [String] {
+        guard let root = previewProjectRoot() else { return [] }
+        var out: [String] = []
+        guard let enumerator = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]) else { return [] }
+        for case let url as URL in enumerator {
+            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
+            out.append(url.path.replacingOccurrences(of: root.path + "/", with: ""))
+        }
+        return out.sorted()
+    }
+
+    /// Current contents of every .swift file (editor buffer wins for the
+    /// open file). Used by Find References.
+    func swiftFileContents() -> [String: String] {
+        guard let root = previewProjectRoot() else { return [:] }
+        var out: [String: String] = [:]
+        guard let enumerator = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]) else { return [:] }
+        for case let url as URL in enumerator {
+            guard url.pathExtension == "swift",
+                  (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
+            let relative = url.path.replacingOccurrences(of: root.path + "/", with: "")
+            if let wsPath = workspacePath(ofProjectRelative: relative), wsPath == openFilePath {
+                out[relative] = editorText
+            } else if let content = try? String(contentsOf: url, encoding: .utf8) {
+                out[relative] = content
+            }
+        }
+        return out
     }
 
     // MARK: - Preview support (§二 multi-file index, §三 inspector writes)

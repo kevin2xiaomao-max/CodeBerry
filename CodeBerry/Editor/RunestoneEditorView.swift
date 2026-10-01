@@ -1,13 +1,22 @@
+import Runestone
 import SwiftUI
+import TreeSitterSwiftRunestone
 import UIKit
 
-/// Lets SwiftUI views (suggestion bar, symbol keys) drive the UIKit text view.
+/// Lets SwiftUI views (coding bar, suggestions) drive the Runestone text view.
 @MainActor
 final class EditorController {
-    weak var textView: CodeTextView?
+    weak var textView: TextView?
 
     func insert(_ snippet: String) {
         textView?.insertText(snippet)
+    }
+
+    /// Moves the caret by a character offset (Coding Bar ← →).
+    func moveCaret(by offset: Int) {
+        guard let tv = textView else { return }
+        let loc = max(0, min((tv.text as NSString).length, tv.selectedRange.location + offset))
+        tv.selectedRange = NSRange(location: loc, length: 0)
     }
 
     /// Replaces the identifier being typed at the caret with `word`.
@@ -25,55 +34,110 @@ final class EditorController {
         textView?.resignFirstResponder()
     }
 
+    /// Caret offset in the document, or nil when there's a selection.
+    var caretOffset: Int? {
+        guard let tv = textView, tv.selectedRange.length == 0 else { return nil }
+        return tv.selectedRange.location
+    }
+
+    /// Text before the caret (for context-aware suggestions).
+    var textBeforeCaret: String {
+        guard let tv = textView else { return "" }
+        let ns = tv.text as NSString
+        return ns.substring(to: min(tv.selectedRange.location, ns.length))
+    }
+
     nonisolated static func isIdentifierChar(_ c: unichar) -> Bool {
         (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || (c >= 48 && c <= 57) || c == 95
     }
 }
 
-/// The code editor: syntax highlighting, line numbers, auto-indent and
-/// bracket pairing, with the buffer bound to the workspace store.
-struct CodeEditorView: UIViewRepresentable {
+/// The code editor: Runestone (Tree-sitter highlighting, line numbers,
+/// find/replace) with the buffer bound to the workspace store.
+///
+/// The Coding Bar above the keyboard is a plain toolbar — it never intercepts
+/// keystrokes, so Chinese (and other marked-text) input is unaffected.
+@MainActor
+struct RunestoneEditorView: UIViewRepresentable {
     @Binding var text: String
     let fileID: String
     let controller: EditorController
+    /// Diagnostic underlines, refreshed by the parent.
+    var diagnosticRanges: [HighlightedRange] = []
+    /// When set to a 1-based line, the editor scrolls there once.
+    @Binding var navigateToLine: Int?
     var onCaretWordChange: (String) -> Void = { _ in }
+    var onTextChange: () -> Void = {}
 
-    func makeUIView(context: Context) -> CodeTextView {
-        let tv = CodeTextView()
-        tv.delegate = context.coordinator
+    func makeUIView(context: Context) -> TextView {
+        let tv = TextView()
+        tv.showLineNumbers = true
+        tv.isLineWrappingEnabled = false
+        tv.isFindInteractionEnabled = true
+        tv.autocorrectionType = .no
+        tv.autocapitalizationType = .none
+        tv.smartQuotesType = .no
+        tv.smartDashesType = .no
+        tv.keyboardAppearance = .default
+        tv.editorDelegate = context.coordinator
+        applyAppearance(tv)
         controller.textView = tv
         return tv
     }
 
-    func updateUIView(_ tv: CodeTextView, context: Context) {
+    func updateUIView(_ tv: TextView, context: Context) {
         context.coordinator.parent = self
         controller.textView = tv
+        applyAppearance(tv)
         if context.coordinator.currentFileID != fileID {
             context.coordinator.currentFileID = fileID
             context.coordinator.setText(text, in: tv, resetScroll: true)
+            applyLanguageMode(tv)
         } else if tv.text != text {
-            // External change: the agent rewrote the open file on disk.
+            // External change: the file was rewritten on disk.
             context.coordinator.setText(text, in: tv, resetScroll: false)
+        }
+        tv.highlightedRanges = diagnosticRanges
+        if let line = navigateToLine {
+            navigateToLine = nil
+            _ = tv.goToLine(max(0, line - 1))
+        }
+    }
+
+    private func applyAppearance(_ tv: TextView) {
+        let style = tv.traitCollection.userInterfaceStyle
+        tv.theme = CodeBerryEditorTheme(userInterfaceStyle: style)
+        tv.backgroundColor = style == .dark
+            ? UIColor(red: 0.11, green: 0.12, blue: 0.14, alpha: 1) : .white
+        tv.insertionPointColor = style == .dark ? .white : .black
+    }
+
+    private func applyLanguageMode(_ tv: TextView) {
+        if fileID.hasSuffix(".swift") {
+            tv.setLanguageMode(TreeSitterLanguageMode(language: .swift)) { _ in }
+        } else {
+            tv.setLanguageMode(PlainTextLanguageMode()) { _ in }
         }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
+    // @MainActor so it can touch `parent` (SwiftUI Views are @MainActor).
+    // The TextViewDelegate witnesses are marked nonisolated (the protocol
+    // is nonisolated) and re-enter via MainActor.assumeIsolated — Runestone
+    // always invokes them on the main thread.
     @MainActor
-    final class Coordinator: NSObject, UITextViewDelegate {
-        var parent: CodeEditorView
+    final class Coordinator: NSObject, TextViewDelegate {
+        var parent: RunestoneEditorView
         var currentFileID: String?
         private var suppressCallbacks = false
-        private var highlightTask: Task<Void, Never>?
 
-        init(_ parent: CodeEditorView) { self.parent = parent }
+        init(_ parent: RunestoneEditorView) { self.parent = parent }
 
-        func setText(_ newText: String, in tv: CodeTextView, resetScroll: Bool) {
+        func setText(_ newText: String, in tv: TextView, resetScroll: Bool) {
             suppressCallbacks = true
             let oldSelection = tv.selectedRange
             tv.text = newText
-            SwiftHighlighter.highlight(tv.textStorage)
-            tv.textDidUpdate()
             tv.undoManager?.removeAllActions()
             if resetScroll {
                 tv.selectedRange = NSRange(location: 0, length: 0)
@@ -85,24 +149,24 @@ struct CodeEditorView: UIViewRepresentable {
             suppressCallbacks = false
         }
 
-        // MARK: UITextViewDelegate
+        // MARK: TextViewDelegate
 
-        func textViewDidChange(_ textView: UITextView) {
-            guard !suppressCallbacks else { return }
-            parent.text = textView.text
-            if textView.markedTextRange == nil {
-                scheduleHighlight(textView)
+        nonisolated func textViewDidChange(_ textView: TextView) {
+            MainActor.assumeIsolated {
+                guard !self.suppressCallbacks else { return }
+                self.parent.text = textView.text
+                self.parent.onTextChange()
             }
-            (textView as? CodeTextView)?.textDidUpdate()
-            reportCaretWord(textView)
         }
 
-        func textViewDidChangeSelection(_ textView: UITextView) {
-            guard !suppressCallbacks else { return }
-            reportCaretWord(textView)
+        nonisolated func textViewDidChangeSelection(_ textView: TextView) {
+            MainActor.assumeIsolated {
+                guard !self.suppressCallbacks else { return }
+                self.reportCaretWord(textView)
+            }
         }
 
-        func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange,
+        nonisolated func textView(_ textView: TextView, shouldChangeTextIn range: NSRange,
                       replacementText t: String) -> Bool {
             let ns = textView.text as NSString
             let prev = range.location > 0
@@ -157,21 +221,7 @@ struct CodeEditorView: UIViewRepresentable {
 
         // MARK: Helpers
 
-        private func scheduleHighlight(_ textView: UITextView) {
-            if textView.textStorage.length < 30_000 {
-                SwiftHighlighter.highlight(textView.textStorage)
-                return
-            }
-            // Large file: debounce so typing stays responsive.
-            highlightTask?.cancel()
-            highlightTask = Task {
-                try? await Task.sleep(for: .milliseconds(200))
-                guard !Task.isCancelled else { return }
-                SwiftHighlighter.highlight(textView.textStorage)
-            }
-        }
-
-        private func reportCaretWord(_ textView: UITextView) {
+        private func reportCaretWord(_ textView: TextView) {
             let ns = textView.text as NSString
             let selection = textView.selectedRange
             guard selection.length == 0, selection.location <= ns.length else {

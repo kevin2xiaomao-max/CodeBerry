@@ -283,6 +283,7 @@ enum L10nKey: String, CaseIterable {
     case referencesEmpty        // 无引用
     case referencesEmptyDesc    // 在项目中没有找到 %@ 的其他引用
     case symbolLineInfo         // %@ · %@ · 行 %d
+    case diagnosticPosition     // 行 %d，列 %d
 
     // MARK: Misc
     case fileLine              // %@ · 第 %d 行
@@ -587,6 +588,7 @@ final class L10nService: @unchecked Sendable {
         .referencesEmpty: ("无引用", "No references"),
         .referencesEmptyDesc: ("在项目中没有找到 %@ 的其他引用", "No other references to %@ found in the project"),
         .symbolLineInfo: ("%1$@ · %2$@ · 行 %3$d", "%1$@ · %2$@ · line %3$d"),
+        .diagnosticPosition: ("行 %1$d，列 %2$d", "Line %1$d, column %2$d"),
 
         // Misc
         .fileLine: ("%1$@ · 第 %2$d 行", "%1$@ · line %2$d"),

@@ -19,6 +19,10 @@
 		CB3000000000000000000013 /* Runestone in Frameworks */ = {isa = PBXBuildFile; productRef = CB3000000000000000000012 /* Runestone */; };
 		CB3000000000000000000015 /* TreeSitterSwiftRunestone in Frameworks */ = {isa = PBXBuildFile; productRef = CB3000000000000000000014 /* TreeSitterSwiftRunestone */; };
 		CB3000000000000000000017 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = CB3000000000000000000016 /* ZIPFoundation */; };
+		BC000000000000000000002A /* SwiftDiagnostics in Frameworks */ = {isa = PBXBuildFile; productRef = BC0000000000000000000029 /* SwiftDiagnostics */; };
+		BC000000000000000000002C /* SwiftParserDiagnostics in Frameworks */ = {isa = PBXBuildFile; productRef = BC000000000000000000002B /* SwiftParserDiagnostics */; };
+		CB3000000000000000000019 /* SwiftDiagnostics in Frameworks */ = {isa = PBXBuildFile; productRef = CB3000000000000000000018 /* SwiftDiagnostics */; };
+		CB300000000000000000001B /* SwiftParserDiagnostics in Frameworks */ = {isa = PBXBuildFile; productRef = CB300000000000000000001A /* SwiftParserDiagnostics */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -60,6 +64,8 @@
 				BC0000000000000000000022 /* Runestone in Frameworks */,
 				BC0000000000000000000025 /* TreeSitterSwiftRunestone in Frameworks */,
 				BC0000000000000000000028 /* ZIPFoundation in Frameworks */,
+				BC000000000000000000002A /* SwiftDiagnostics in Frameworks */,
+				BC000000000000000000002C /* SwiftParserDiagnostics in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -73,6 +79,8 @@
 				CB3000000000000000000013 /* Runestone in Frameworks */,
 				CB3000000000000000000015 /* TreeSitterSwiftRunestone in Frameworks */,
 				CB3000000000000000000017 /* ZIPFoundation in Frameworks */,
+				CB3000000000000000000019 /* SwiftDiagnostics in Frameworks */,
+				CB300000000000000000001B /* SwiftParserDiagnostics in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -131,6 +139,8 @@
 				BC0000000000000000000021 /* Runestone */,
 				BC0000000000000000000024 /* TreeSitterSwiftRunestone */,
 				BC0000000000000000000027 /* ZIPFoundation */,
+				BC0000000000000000000029 /* SwiftDiagnostics */,
+				BC000000000000000000002B /* SwiftParserDiagnostics */,
 			);
 			productName = CodeBerry;
 			productReference = BC0000000000000000000001 /* CodeBerry.app */;
@@ -160,6 +170,8 @@
 				CB3000000000000000000012 /* Runestone */,
 				CB3000000000000000000014 /* TreeSitterSwiftRunestone */,
 				CB3000000000000000000016 /* ZIPFoundation */,
+				CB3000000000000000000018 /* SwiftDiagnostics */,
+				CB300000000000000000001A /* SwiftParserDiagnostics */,
 			);
 			productName = CodeBerryTests;
 			productReference = CB3000000000000000000008 /* CodeBerryTests.xctest */;
@@ -529,6 +541,26 @@
 			isa = XCSwiftPackageProductDependency;
 			package = BC0000000000000000000026 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
 			productName = ZIPFoundation;
+		};
+		BC0000000000000000000029 /* SwiftDiagnostics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BC0000000000000000000013 /* XCRemoteSwiftPackageReference "swift-syntax" */;
+			productName = SwiftDiagnostics;
+		};
+		BC000000000000000000002B /* SwiftParserDiagnostics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BC0000000000000000000013 /* XCRemoteSwiftPackageReference "swift-syntax" */;
+			productName = SwiftParserDiagnostics;
+		};
+		CB3000000000000000000018 /* SwiftDiagnostics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BC0000000000000000000013 /* XCRemoteSwiftPackageReference "swift-syntax" */;
+			productName = SwiftDiagnostics;
+		};
+		CB300000000000000000001A /* SwiftParserDiagnostics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BC0000000000000000000013 /* XCRemoteSwiftPackageReference "swift-syntax" */;
+			productName = SwiftParserDiagnostics;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
