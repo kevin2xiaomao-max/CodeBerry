@@ -104,6 +104,15 @@ final class PreviewProjectIndex {
 
     private var files: [String: IndexedFile] = [:]
     private var fingerprints: [String: UInt64] = [:]
+    /// 4.0.2 P1-11: mtime/size pre-filter so warm passes skip unchanged
+    /// files without even reading+hashing them.
+    private var fileMeta: [String: FileMeta] = [:]
+
+    /// Cheap stat snapshot used as a pre-filter before read+hash.
+    struct FileMeta: Equatable, Sendable {
+        let mtime: Date
+        let size: Int
+    }
 
     /// All Views in the project: name → (defining file, struct).
     private(set) var viewsByName: [String: (file: String, view: PreviewViewStruct)] = [:]
@@ -120,7 +129,8 @@ final class PreviewProjectIndex {
     // MARK: - Incremental update (warm path, synchronous)
 
     /// Incremental update: lists files, then only (re-)parses files whose
-    /// content hash changed since the last pass. Unchanged entries are kept,
+    /// content hash changed since the last pass. Files whose mtime/size
+    /// are unchanged skip even the read+hash; unchanged entries are kept,
     /// so per-keystroke work is O(changed), not O(project).
     ///
     /// - Parameters:
@@ -139,22 +149,32 @@ final class PreviewProjectIndex {
         var rebuilt = false
         var live = Set<String>()
         live.reserveCapacity(ordered.count)
-        for (path, _) in ordered {
+        for item in ordered {
+            let path = item.path
             live.insert(path)
-            let content: String?
             if path == currentPath {
-                content = currentSource
-            } else {
-                content = readFile(path)
+                // The live in-memory buffer always wins for the current
+                // file; disk mtime can't be trusted for unsaved edits.
+                fileMeta[path] = item.meta
+                let hash = Self.hash(currentSource)
+                if fingerprints[path] == hash { continue }
+                index(path: path, source: currentSource, hash: hash)
+                rebuilt = true
+                continue
             }
-            guard let content else {
+            // 4.0.2 P1-11 mtime/size pre-filter: unchanged files skip
+            // even the read+hash; only stat-changed files are read.
+            if fileMeta[path] == item.meta { continue }
+            guard let content = readFile(path) else {
                 // Unreadable (deleted mid-pass): drop any stale entry.
                 if files.removeValue(forKey: path) != nil { rebuilt = true }
                 fingerprints.removeValue(forKey: path)
+                fileMeta.removeValue(forKey: path)
                 continue
             }
             let hash = Self.hash(content)
-            if fingerprints[path] == hash { continue }  // unchanged — keep cache
+            fileMeta[path] = item.meta
+            if fingerprints[path] == hash { continue }  // mtime-only touch
             index(path: path, source: content, hash: hash)
             rebuilt = true
         }
@@ -162,6 +182,7 @@ final class PreviewProjectIndex {
         for path in files.keys where !live.contains(path) {
             files.removeValue(forKey: path)
             fingerprints.removeValue(forKey: path)
+            fileMeta.removeValue(forKey: path)
             rebuilt = true
         }
         if rebuilt { rebuildLookup() }
@@ -185,23 +206,40 @@ final class PreviewProjectIndex {
         let listed = Self.swiftFiles(under: projectRoot, projectName: projectName)
         totalCount = listed.count
         let ordered = Self.currentFileFirst(listed, currentPath: currentPath)
-        // Snapshot (path, content) pairs on the caller's actor.
-        var snapshot: [(path: String, content: String, hash: UInt64)] = []
+        // Snapshot (path, content) pairs on the caller's actor. fileMeta is
+        // only READ here (pre-filter); it is WRITTEN in the merge below,
+        // so a cancelled pass never marks unparsed files as done.
+        var snapshot: [ParseSnapshot] = []
         snapshot.reserveCapacity(ordered.count)
-        for (path, _) in ordered {
-            let content = (path == currentPath) ? currentSource : readFile(path)
-            guard let content else { continue }
+        for item in ordered {
+            let path = item.path
+            if path == currentPath {
+                let hash = Self.hash(currentSource)
+                if fingerprints[path] == hash { continue }  // already indexed
+                snapshot.append(ParseSnapshot(path: path, content: currentSource,
+                                              hash: hash, meta: item.meta))
+                continue
+            }
+            // 4.0.2 P1-11: same mtime/size pre-filter as the warm pass.
+            if fileMeta[path] == item.meta { continue }
+            guard let content = readFile(path) else { continue }
             let hash = Self.hash(content)
-            if fingerprints[path] == hash { continue }  // already indexed
-            snapshot.append((path, content, hash))
+            if fingerprints[path] == hash {
+                fileMeta[path] = item.meta  // mtime-only touch
+                continue
+            }
+            snapshot.append(ParseSnapshot(path: path, content: content,
+                                          hash: hash, meta: item.meta))
         }
         // Parse the rest on a background thread, in cancellable batches.
         let parsed = await Self.parseInBackground(snapshot)
-        guard !Task.isCancelled else { return }
+        // Merge whatever completed — even when cancelled, partial progress
+        // is valid and lets the next pass converge instead of restarting.
         var rebuilt = false
         for file in parsed {
             files[file.parsed.path] = file.parsed.entry
-            fingerprints[file.parsed.path] = file.hash
+            fingerprints[file.parsed.path] = file.parsed.entry.hash
+            fileMeta[file.parsed.path] = file.meta
             rebuilt = true
         }
         // Drop deleted files.
@@ -209,6 +247,7 @@ final class PreviewProjectIndex {
         for path in files.keys where !live.contains(path) {
             files.removeValue(forKey: path)
             fingerprints.removeValue(forKey: path)
+            fileMeta.removeValue(forKey: path)
             rebuilt = true
         }
         if rebuilt { rebuildLookup() }
@@ -248,6 +287,15 @@ final class PreviewProjectIndex {
         let entry: IndexedFile
     }
 
+    /// One file's snapshot for background parsing (P1-11: carries the
+    /// stat meta so the merge can record it only for parsed files).
+    private struct ParseSnapshot: Sendable {
+        let path: String
+        let content: String
+        let hash: UInt64
+        let meta: FileMeta
+    }
+
     /// Parses one file; nil when the file has syntax errors (caller keeps the
     /// stale entry).
     private static func parseFile(path: String, content: String) -> ParsedFile? {
@@ -272,12 +320,17 @@ final class PreviewProjectIndex {
     /// Parses snapshotted files on a background thread, in batches, checking
     /// cancellation between batches. Never touches the caller's actor or the
     /// index itself.
+    ///
+    /// 4.0.2 P1-11: cancellation is propagated into the detached task via
+    /// `withTaskCancellationHandler` — a detached task does NOT inherit the
+    /// caller's cancellation, so without this the batch check would be dead.
     private static func parseInBackground(
-        _ snapshot: [(path: String, content: String, hash: UInt64)]
-    ) async -> [(parsed: ParsedFile, hash: UInt64)] {
+        _ snapshot: [ParseSnapshot]
+    ) async -> [(parsed: ParsedFile, meta: FileMeta)] {
         guard !snapshot.isEmpty else { return [] }
-        return await Task.detached(priority: .userInitiated) {
-            var out: [(parsed: ParsedFile, hash: UInt64)] = []
+        let parseTask = Task.detached(priority: .userInitiated) {
+            () -> [(parsed: ParsedFile, meta: FileMeta)] in
+            var out: [(parsed: ParsedFile, meta: FileMeta)] = []
             out.reserveCapacity(snapshot.count)
             for batchStart in stride(from: 0, to: snapshot.count,
                                      by: ProjectIndexPolicy.backgroundBatchSize) {
@@ -287,19 +340,24 @@ final class PreviewProjectIndex {
                 for i in batchStart..<batchEnd {
                     let file = snapshot[i]
                     if let parsed = parseFile(path: file.path, content: file.content) {
-                        out.append((parsed, file.hash))
+                        out.append((parsed, file.meta))
                     }
                 }
             }
             return out
-        }.value
+        }
+        return await withTaskCancellationHandler {
+            await parseTask.value
+        } onCancel: {
+            parseTask.cancel()
+        }
     }
 
     // MARK: - Helpers
 
     /// Current file first; the rest keep path order (deterministic).
-    private static func currentFileFirst(_ listed: [(path: String, url: URL)],
-                                         currentPath: String?) -> [(path: String, url: URL)] {
+    private static func currentFileFirst(_ listed: [ListedFile],
+                                         currentPath: String?) -> [ListedFile] {
         guard let currentPath,
               let idx = listed.firstIndex(where: { $0.path == currentPath }) else {
             return listed
@@ -310,18 +368,32 @@ final class PreviewProjectIndex {
         return ordered
     }
 
-    private static func swiftFiles(under root: URL, projectName: String) -> [(path: String, url: URL)] {
-        var out: [(path: String, url: URL)] = []
+    /// A Swift file found under the project root, with a cheap stat
+    /// snapshot for the P1-11 mtime/size pre-filter.
+    struct ListedFile {
+        let path: String
+        let url: URL
+        let meta: FileMeta
+    }
+
+    private static func swiftFiles(under root: URL, projectName: String) -> [ListedFile] {
+        var out: [ListedFile] = []
         let fm = FileManager.default
+        let keys: [URLResourceKey] = [.isRegularFileKey,
+                                      .contentModificationDateKey,
+                                      .fileSizeKey]
         guard let enumerator = fm.enumerator(at: root,
-                                            includingPropertiesForKeys: [.isRegularFileKey],
+                                            includingPropertiesForKeys: keys,
                                             options: [.skipsHiddenFiles]) else { return [] }
         for case let url as URL in enumerator {
             guard url.pathExtension == "swift" else { continue }
             var rel = url.path
             let prefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
             if rel.hasPrefix(prefix) { rel = String(rel.dropFirst(prefix.count)) }
-            out.append((path: projectName + "/" + rel, url: url))
+            let values = try? url.resourceValues(forKeys: Set(keys))
+            let meta = FileMeta(mtime: values?.contentModificationDate ?? .distantPast,
+                                size: values?.fileSize ?? -1)
+            out.append(ListedFile(path: projectName + "/" + rel, url: url, meta: meta))
             if out.count >= ProjectIndexPolicy.maxFiles { break }
         }
         return out.sorted { $0.path < $1.path }

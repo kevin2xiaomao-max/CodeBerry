@@ -447,7 +447,10 @@ struct PreviewCanvasView: View {
                                                    currentSource: source,
                                                    readFile: readFile)
             projectIndex.isIndexing = false
-            indexBuilt = true
+            // 4.0.2 P1-11: a cancelled cold pass merges partial progress
+            // but stays on the cold path — flipping indexBuilt here would
+            // push the whole backlog through a main-thread warm parse.
+            if !Task.isCancelled { indexBuilt = true }
         } else {
             projectIndex.update(projectRoot: root,
                                 projectName: name,

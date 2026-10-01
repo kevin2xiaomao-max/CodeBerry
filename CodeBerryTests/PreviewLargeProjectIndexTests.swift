@@ -189,4 +189,43 @@ final class PreviewLargeProjectIndexTests: XCTestCase {
                       "current-file definition must win over the index")
         XCTAssertFalse(texts.contains("from-target"))
     }
+
+    // MARK: - P1-11: mtime/size pre-filter (no read+hash for unchanged files)
+
+    func testWarmPassSkipsUnchangedFilesWithoutReading() throws {
+        let root = try makeProject(fileCount: 20)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let index = PreviewProjectIndex()
+        let base = readFile(in: root)
+        var reads = 0
+        let countingRead: (String) -> String? = { path in
+            reads += 1
+            return base(path)
+        }
+        // currentPath nil: every file goes through the background path.
+        index.update(projectRoot: root, projectName: "Proj",
+                     currentPath: nil, currentSource: "",
+                     readFile: countingRead)
+        XCTAssertEqual(reads, 21, "cold pass reads every file")
+
+        // Warm pass with no changes: mtime/size match → zero reads.
+        reads = 0
+        index.update(projectRoot: root, projectName: "Proj",
+                     currentPath: nil, currentSource: "",
+                     readFile: countingRead)
+        XCTAssertEqual(reads, 0,
+                       "P1-11: warm pass must not re-read unchanged files")
+
+        // Change exactly one file → only it is re-read and re-parsed.
+        try "struct Pad0: View { var body: some View { Text(\"changed\") } }"
+            .write(to: root.appendingPathComponent("File000.swift"),
+                   atomically: true, encoding: .utf8)
+        reads = 0
+        index.update(projectRoot: root, projectName: "Proj",
+                     currentPath: nil, currentSource: "",
+                     readFile: countingRead)
+        XCTAssertEqual(reads, 1, "only the changed file is re-read")
+        XCTAssertNotNil(index.viewsByName["Pad0"])
+    }
 }
