@@ -73,6 +73,10 @@ struct PreviewTypeInfo {
     let opaqueStatics: Set<String>
     /// Instance `var`/`let` members: name → declared type annotation.
     let instanceMembers: [String: String]
+    /// 4.0.3 S4 (P0-B): `static func` members: name → declared return type.
+    /// Calls are never executed — the evaluator returns a preview default
+    /// of the recorded return type instead.
+    let staticFunctions: [String: String]
     /// `static let shared` / `static var shared` singleton pattern.
     var isSingleton: Bool {
         opaqueStatics.contains("shared") || staticValues["shared"] != nil

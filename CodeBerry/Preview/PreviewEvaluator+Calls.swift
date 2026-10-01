@@ -79,6 +79,15 @@ extension PreviewEvaluator {
                     return result
                 }
             }
+            // 4.0.3 S4 (P0-B): unknown static function calls on known types —
+            // `HomeInbox.items(...)` is never executed; the recorded return
+            // type gives the approximation (Info, never an error).
+            if case .typeStub(let typeName) = baseValue,
+               let approx = resolver.resolveStaticCall(type: typeName, function: name) {
+                diagnose(.info, .diagStaticCallApproximated,
+                         params: ["\(typeName).\(name)"], api: name, node: call)
+                return approx
+            }
             diagnose(.warning, .diagMethodUnsupported, params: [name], api: name, node: call)
             return .void
         }

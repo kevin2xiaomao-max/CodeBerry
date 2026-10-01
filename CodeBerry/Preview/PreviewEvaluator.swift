@@ -108,19 +108,18 @@ final class PreviewEvaluator {
 
     /// All Views visible to this evaluation: project index first, current
     /// document overriding ("当前文件的定义优先").
-    var activeViews: [String: PreviewViewStruct] {
-        guard let index = projectIndex else { return doc.views }
-        var merged: [String: PreviewViewStruct] = [:]
-        for (name, entry) in index.viewsByName { merged[name] = entry.view }
-        for (name, view) in doc.views { merged[name] = view }
-        return merged
-    }
+    /// 4.0.3 S4 (P0-B): the single source of truth lives in PreviewResolver.
+    var activeViews: [String: PreviewViewStruct] { resolver.activeViews }
     /// 4.0.2 P0-3: all ordinary types visible to this evaluation — current
     /// document first, then the project index.
-    var activeTypes: [String: PreviewTypeInfo] {
-        var merged = projectIndex?.typesByName ?? [:]
-        for (name, info) in doc.types { merged[name] = info }
-        return merged
+    /// 4.0.3 S4 (P0-B): the single source of truth lives in PreviewResolver.
+    var activeTypes: [String: PreviewTypeInfo] { resolver.activeTypes }
+    /// 4.0.3 S4 (P0-B): unified symbol resolver. Computed on demand so it
+    /// is always in sync with doc / projectIndex / mockStore — no separate
+    /// invalidation needed.
+    var resolver: PreviewResolver {
+        PreviewResolver(document: doc, projectIndex: projectIndex,
+                        mockStore: mockStore, runtime: runtime)
     }
     /// 4.0.2 P0-3: preview default for a declared type name. Never executes
     /// user code (no `didSet`, no initializers, no UserDefaults).
@@ -388,29 +387,26 @@ final class PreviewEvaluator {
             diagnose(.warning, .diagNotState, params: [property])
             return .void
         }
-        if let local = env.locals[name] { return local }
-        if let key = env.stateKeys[name] { return runtime.value(key) ?? .void }
-        if let computed = activeViews[env.typeName]?.computedViews[name] {
+        // 4.0.3 S4 (P0-B): the resolution order lives in PreviewResolver;
+        // behavior is unchanged, only the lookup is unified.
+        switch resolver.resolve(name, env: env) {
+        case .value(let value):
+            return value
+        case .typeStub(let typeName):
+            // 4.0.2 P0-3: a bare reference to a known cross-file type (e.g.
+            // `DemoMode`) stubs instead of erroring — never executes real code.
+            diagnose(.info, .diagTypePreviewDefault, params: [typeName], api: name, node: nil)
+            return .typeStub(typeName)
+        case .computedView(let computed):
             return try invokeComputedView(computed, env: env)
-        }
-        // 4.0.3 S3 (P0-A): ordinary computed properties — `greetingPrefix`,
-        // `ownerDisplayName`, `handlingItems`. Pure getters are evaluated for
-        // their value; the rest are approximated, never executed.
-        if let prop = activeViews[env.typeName]?.computedProperties[name] {
+        case .computedProperty(let prop):
+            // 4.0.3 S3 (P0-A): ordinary computed properties — `greetingPrefix`,
+            // `ownerDisplayName`, `handlingItems`.
             return try invokeComputedProperty(prop, env: env)
+        case .unknown:
+            diagnose(.error, .diagUnknownIdentifier, params: [name], api: name, node: nil)
+            return .void
         }
-        // §六 Design token fallback: `let brand = Color(...)` / `V32.gap`.
-        if let token = projectIndex?.tokensByName[name] { return token.value }
-        // §七 Mock fallback before giving up.
-        if let mock = mockStore?.value(for: name) { return mock }
-        // 4.0.2 P0-3: a bare reference to a known cross-file type (e.g.
-        // `DemoMode`) stubs instead of erroring — never executes real code.
-        if let typeInfo = activeTypes[name] {
-            diagnose(.info, .diagTypePreviewDefault, params: [name], api: name, node: nil)
-            return .typeStub(typeInfo.name)
-        }
-        diagnose(.error, .diagUnknownIdentifier, params: [name], api: name, node: nil)
-        return .void
     }
 
     /// Evaluates a `var xxx: some View { ... }` computed subview in the
@@ -579,17 +575,14 @@ final class PreviewEvaluator {
             // §六/§七 qualified lookup: `V32Layout.sectionGap` may be a design
             // token or a mock value when the base type is otherwise unknown.
             let qualified = "\(reference.baseName.text).\(name)"
-            // 4.0.2 P0-3: cross-file ordinary types — `DemoMode.shared`,
-            // `DemoCatalog.monthlyRevenue`. Static lets with literal values
-            // resolve directly; opaque statics (e.g. `shared = DemoMode()`,
-            // anything with side effects) become type stubs. Never executed.
-            if let typeInfo = activeTypes[reference.baseName.text] {
-                if let value = typeInfo.staticValues[name] { return value }
-                if typeInfo.opaqueStatics.contains(name) {
-                    // Enum cases behave like unqualified members (`.demo`).
-                    if typeInfo.kind == .enum { return .member(name) }
-                    return .typeStub(typeInfo.name)
-                }
+            // 4.0.3 S4 (P0-B): cross-file ordinary types via the unified
+            // resolver — `DemoMode.shared`, `V32.hero`, enum cases. Static
+            // lets with literal values resolve directly; opaque statics
+            // (e.g. `shared = DemoMode()`, anything with side effects)
+            // become type stubs. Never executed.
+            if let resolved = resolver.resolveQualified(type: reference.baseName.text,
+                                                        member: name) {
+                return resolved
             }
             if let token = projectIndex?.tokensByName[qualified] { return token.value }
             if let mock = mockStore?.value(for: qualified) { return mock }

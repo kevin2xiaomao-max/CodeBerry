@@ -220,6 +220,7 @@ enum L10nKey: String, CaseIterable {
     case diagSwiftDataNoSubstitution  // SwiftData %@ 无可用替代，无法形成有效预览
     case diagNoTargetView           // 未指定目标 View
     case diagGeneratedShadowed      // 生成的 %@ 被同名 production 符号遮蔽
+    case diagStaticCallApproximated // 静态方法 %@ 未执行，已用声明的返回类型近似
 
     // MARK: GitHub Direct (§8/§9, 4.0 M1)
     case githubImportTitle       // 从 GitHub 导入
@@ -618,6 +619,8 @@ final class L10nService: @unchecked Sendable {
         .diagNoTargetView: ("未指定目标 View", "No target view specified"),
         .diagGeneratedShadowed: ("生成的 %@ 被同名 production 符号遮蔽",
                                  "Generated %@ is shadowed by a same-name production symbol"),
+        .diagStaticCallApproximated: ("静态方法 %@ 未执行，已用声明的返回类型近似",
+                                      "Static method %@ not executed; approximated by declared return type"),
 
         // GitHub Direct (4.0 M1)
         .githubImportTitle: ("从 GitHub 导入", "Import from GitHub"),

@@ -291,7 +291,21 @@ struct PreviewEngine {
             var staticValues: [String: PreviewValue] = [:]
             var opaqueStatics = extraOpaque
             var instanceMembers: [String: String] = [:]
+            // 4.0.3 S4 (P0-B): static functions — name → declared return
+            // type. Never executed; calls get a preview default instead.
+            var staticFunctions: [String: String] = [:]
             for member in members {
+                if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
+                    let isStatic = funcDecl.modifiers.contains {
+                        $0.name.text == "static" || $0.name.text == "class"
+                    }
+                    if isStatic {
+                        let returnType = funcDecl.signature.returnClause?.type
+                            .trimmedDescription ?? "Void"
+                        staticFunctions[funcDecl.name.text] = returnType
+                    }
+                    continue
+                }
                 guard let varDecl = member.decl.as(VariableDeclSyntax.self) else { continue }
                 let isStatic = varDecl.modifiers.contains { $0.name.text == "static" }
                 for binding in varDecl.bindings {
@@ -316,7 +330,8 @@ struct PreviewEngine {
             return PreviewTypeInfo(name: name, kind: kind, filePath: filePath,
                                    staticValues: staticValues,
                                    opaqueStatics: opaqueStatics,
-                                   instanceMembers: instanceMembers)
+                                   instanceMembers: instanceMembers,
+                                   staticFunctions: staticFunctions)
         }
 
         for item in file.statements {
