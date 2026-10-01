@@ -181,6 +181,28 @@ struct PreviewEngine {
         return doc
     }
 
+    /// Extracts the type name from `@Environment(AppSettings.self)` (or
+    /// `@EnvironmentObject`/`@StateObject`/`@ObservedObject` with the same
+    /// shape) when the property has no explicit type annotation.
+    private static func environmentTypeName(from attributes: AttributeListSyntax) -> String? {
+        for element in attributes {
+            guard case .attribute(let attr) = element else { continue }
+            let attrName = attr.attributeName.trimmedDescription
+            guard ["Environment", "EnvironmentObject", "StateObject", "ObservedObject"]
+                .contains(attrName) else { continue }
+            // `@Environment(AppSettings.self)` — the argument parses as a
+            // member access `AppSettings.self`.
+            if case .argumentList(let args) = attr.arguments,
+               let first = args.first,
+               let member = first.expression.as(MemberAccessExprSyntax.self),
+               member.declName.baseName.text == "self",
+               let base = member.base?.as(DeclReferenceExprSyntax.self) {
+                return base.baseName.text
+            }
+        }
+        return nil
+    }
+
     /// Collect top-level Views and #Preview bodies from a parsed tree.
     static func collect(into doc: inout PreviewDocument, from file: SourceFileSyntax) {
         for info in extractTypes(file: file, filePath: "") {
@@ -417,8 +439,20 @@ struct PreviewEngine {
                     case "ObservedObject": .observedObject
                     default: .dependency
                     }
+                    // 4.0.3: `@Environment(AppSettings.self)` carries the type
+                    // in the attribute argument, not in a type annotation.
+                    // Extract it so known environment types stub to their
+                    // declared member types (`settings.ownerName` → String).
+                    let resolvedType: String
+                    if !typeName.isEmpty {
+                        resolvedType = typeName
+                    } else if let fromAttr = Self.environmentTypeName(from: variable.attributes) {
+                        resolvedType = fromAttr
+                    } else {
+                        resolvedType = "?"
+                    }
                     mockRequirements.append(PreviewMockRequirement(propertyName: name,
-                                                                   typeName: typeName.isEmpty ? "?" : typeName,
+                                                                   typeName: resolvedType,
                                                                    kind: kind))
                     continue
                 }
