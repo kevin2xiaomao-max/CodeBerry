@@ -39,6 +39,59 @@ struct PreviewComputedView {
     let bodyStatements: CodeBlockItemListSyntax?
 }
 
+// MARK: - 4.0.3 S3 (P0-A): ordinary computed property semantic model
+//
+// Real projects compute display values in ordinary computed properties
+// (`greetingPrefix`, `ownerDisplayName`, `handlingItems`). The old engine
+// silently dropped every non-View computed property, so reading one was an
+// "unknown identifier" error. The new model evaluates pure getters for
+// their value (never executing side effects) and approximates the rest.
+
+/// An ordinary (non-View) computed property, e.g.
+/// `var greetingPrefix: String { ... }`.
+struct PreviewComputedProperty {
+    let name: String
+    /// Declared return type text, nil when inferred.
+    let returnType: String?
+    let getterStatements: CodeBlockItemListSyntax?
+
+    /// Conservative purity check: an explicit assignment (`=`, `+=`, …) or
+    /// a `self.`-qualified call in the getter means "may have side effects"
+    /// → the evaluator approximates instead of evaluating.
+    var hasSideEffects: Bool {
+        guard let statements = getterStatements else { return true }
+        let scanner = SideEffectScanner()
+        scanner.walk(statements)
+        return scanner.found
+    }
+}
+
+/// Detects assignments and `self.`-qualified calls in a getter body.
+private final class SideEffectScanner: SyntaxVisitor {
+    var found = false
+
+    override func visit(_ node: AssignmentExprSyntax) -> SyntaxVisitorContinueKind {
+        found = true
+        return .visitChildren
+    }
+
+    override func visit(_ node: InfixOperatorExprSyntax) -> SyntaxVisitorContinueKind {
+        let op = node.operator.as(BinaryOperatorExprSyntax.self)?.operator.text
+            ?? (node.operator.is(AssignmentExprSyntax.self) ? "=" : "")
+        if ["=", "+=", "-=", "*=", "/=", "%="].contains(op) { found = true }
+        return .visitChildren
+    }
+
+    override func visit(_ node: FunctionCallExprSyntax) -> SyntaxVisitorContinueKind {
+        if let member = node.calledExpression.as(MemberAccessExprSyntax.self),
+           let base = member.base?.as(DeclReferenceExprSyntax.self),
+           base.baseName.text == "self" {
+            found = true
+        }
+        return .visitChildren
+    }
+}
+
 /// One parameter of a `-> some View` helper function.
 struct PreviewParameter {
     /// External argument label; nil for `_ name:`.
@@ -78,6 +131,9 @@ struct PreviewViewStruct {
     let bodyStatements: CodeBlockItemListSyntax?
     /// Computed subviews (`var xxx: some View`), excluding `body`.
     var computedViews: [String: PreviewComputedView] = [:]
+    /// 4.0.3 S3 (P0-A): ordinary computed properties
+    /// (`var greetingPrefix: String { ... }`), excluding `body`.
+    var computedProperties: [String: PreviewComputedProperty] = [:]
     /// Helper functions returning `some View`.
     var functions: [String: PreviewFunction] = [:]
     /// External dependencies that need Mock data to preview (§七).
@@ -300,6 +356,7 @@ struct PreviewEngine {
         var properties: [PreviewProperty] = []
         var bodyStatements: CodeBlockItemListSyntax?
         var computedViews: [String: PreviewComputedView] = [:]
+        var computedProperties: [String: PreviewComputedProperty] = [:]
         var functions: [String: PreviewFunction] = [:]
         var mockRequirements: [PreviewMockRequirement] = []
         /// Wrapper attributes that mean "this property needs external data".
@@ -366,6 +423,16 @@ struct PreviewEngine {
                 } else if binding.typeAnnotation?.type.trimmedDescription.contains("some View") == true,
                           let statements = Self.getterStatements(binding.accessorBlock) {
                     computedViews[name] = PreviewComputedView(name: name, bodyStatements: statements)
+                } else if let statements = Self.getterStatements(binding.accessorBlock) {
+                    // 4.0.3 S3 (P0-A): ordinary computed property — previously
+                    // silently dropped, so reading it was an unknown-identifier
+                    // error. Getters with `get`/`set` pairs stay dropped (they
+                    // imply mutation).
+                    let returnType = binding.typeAnnotation?.type.trimmedDescription
+                    computedProperties[name] = PreviewComputedProperty(
+                        name: name,
+                        returnType: returnType?.isEmpty == true ? nil : returnType,
+                        getterStatements: statements)
                 } else if binding.accessorBlock == nil {
                     properties.append(PreviewProperty(name: name,
                                                       isState: isState,
@@ -378,6 +445,7 @@ struct PreviewEngine {
                                  properties: properties,
                                  bodyStatements: bodyStatements,
                                  computedViews: computedViews,
+                                 computedProperties: computedProperties,
                                  functions: functions,
                                  mockRequirements: mockRequirements)
     }

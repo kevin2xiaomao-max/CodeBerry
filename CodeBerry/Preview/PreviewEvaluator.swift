@@ -172,6 +172,9 @@ final class PreviewEvaluator {
     /// Recursion guard shared with PreviewEvaluator+Calls (computed views,
     /// helper functions, struct instantiation).
     var depth = 0
+    /// 4.0.3 S3 (P0-A): computed-property evaluation stack for cycle
+    /// detection (`var a: Int { b }` / `var b: Int { a }`).
+    private var computedPropertyStack: [String] = []
 
     init(doc: PreviewDocument, runtime: PreviewRuntime) {
         self.doc = doc
@@ -390,6 +393,12 @@ final class PreviewEvaluator {
         if let computed = activeViews[env.typeName]?.computedViews[name] {
             return try invokeComputedView(computed, env: env)
         }
+        // 4.0.3 S3 (P0-A): ordinary computed properties — `greetingPrefix`,
+        // `ownerDisplayName`, `handlingItems`. Pure getters are evaluated for
+        // their value; the rest are approximated, never executed.
+        if let prop = activeViews[env.typeName]?.computedProperties[name] {
+            return try invokeComputedProperty(prop, env: env)
+        }
         // §六 Design token fallback: `let brand = Color(...)` / `V32.gap`.
         if let token = projectIndex?.tokensByName[name] { return token.value }
         // §七 Mock fallback before giving up.
@@ -418,6 +427,127 @@ final class PreviewEvaluator {
         if children.count == 1 { return .view(children[0]) }
         if children.isEmpty { return .void }
         return .view(PreviewViewNode(kind: .group(children)))
+    }
+
+    // MARK: - 4.0.3 S3 (P0-A): ordinary computed property evaluation
+
+    /// Evaluates an ordinary computed property for its value.
+    ///
+    /// - Pure getters (no assignments, no `self.` calls) are evaluated —
+    ///   the evaluator already refuses to run real code, so this is safe.
+    /// - Getters with possible side effects become NeedsMock warnings with
+    ///   a preview default from the declared return type.
+    /// - Cycles (`a` reads `b` reads `a`) become warnings, not hangs.
+    private func invokeComputedProperty(_ prop: PreviewComputedProperty,
+                                        env: Env) throws -> PreviewValue {
+        let frame = "\(env.typeName).\(prop.name)"
+        if computedPropertyStack.contains(frame) {
+            diagnose(.warning, .diagComputedPropertyNeedsMock,
+                     params: [frame, "循环引用"], api: prop.name, node: nil)
+            return Self.previewDefault(forTypeName: prop.returnType ?? "")
+        }
+        if prop.hasSideEffects {
+            diagnose(.warning, .diagComputedPropertyNeedsMock,
+                     params: [frame, "可能有副作用"], api: prop.name, node: nil)
+            return Self.previewDefault(forTypeName: prop.returnType ?? "")
+        }
+        depth += 1
+        defer { depth -= 1 }
+        guard depth < 40 else {
+            throw PreviewError(.errRecursionDeep)
+        }
+        computedPropertyStack.append(frame)
+        defer { computedPropertyStack.removeLast() }
+        guard let statements = prop.getterStatements else {
+            diagnose(.warning, .diagComputedPropertyNeedsMock,
+                     params: [frame, "无 getter"], api: prop.name, node: nil)
+            return Self.previewDefault(forTypeName: prop.returnType ?? "")
+        }
+        var getterEnv = env
+        let (value, didReturn) = try evalGetterStatements(statements, env: &getterEnv)
+        // No explicit `return`: a trailing single expression is the value
+        // (Swift implicit return); otherwise the preview default.
+        if didReturn { return value }
+        if case .void = value {
+            return Self.previewDefault(forTypeName: prop.returnType ?? "")
+        }
+        return value
+    }
+
+    /// Evaluates getter statements for a value: `let` bindings become
+    /// locals, `return expr` produces the value. Returns `(value, didReturn)`.
+    private func evalGetterStatements(_ statements: CodeBlockItemListSyntax,
+                                      env: inout Env) throws -> (PreviewValue, Bool) {
+        var last: PreviewValue = .void
+        for item in statements {
+            switch item.item {
+            case .decl(let decl):
+                guard let variable = decl.as(VariableDeclSyntax.self) else { continue }
+                for binding in variable.bindings {
+                    if let pattern = binding.pattern.as(IdentifierPatternSyntax.self),
+                       let initializer = binding.initializer {
+                        env.locals[pattern.identifier.text] = try eval(initializer.value, env: env)
+                    }
+                }
+            case .stmt(let stmt):
+                if let returnStmt = stmt.as(ReturnStmtSyntax.self) {
+                    let value = try returnStmt.expression.map { try eval($0, env: env) } ?? .void
+                    return (value, true)
+                }
+                if let ifStmt = stmt.as(IfStmtSyntax.self) {
+                    let (value, didReturn) = try evalGetterIf(ifStmt, env: &env)
+                    if didReturn { return (value, true) }
+                    last = value
+                }
+            case .expr(let expr):
+                last = try eval(expr, env: env)
+            @unknown default:
+                break
+            }
+        }
+        return (last, false)
+    }
+
+    /// Evaluates an `if` statement inside a getter: conditions support
+    /// plain expressions and `if let` bindings.
+    private func evalGetterIf(_ ifStmt: IfStmtSyntax,
+                              env: inout Env) throws -> (PreviewValue, Bool) {
+        var condTrue = true
+        for element in ifStmt.conditions {
+            switch element.condition {
+            case .expression(let expr):
+                if !((try eval(expr, env: env)).boolValue ?? false) { condTrue = false }
+            case .optionalBinding(let binding):
+                // `if let x = e` — take the branch when e evaluates to
+                // something (void/nil-ish counts as false).
+                if let initializer = binding.initializer {
+                    let value = try eval(initializer.value, env: env)
+                    if case .void = value {
+                        condTrue = false
+                    } else if let pattern = binding.pattern.as(IdentifierPatternSyntax.self) {
+                        env.locals[pattern.identifier.text] = value
+                    }
+                } else {
+                    condTrue = false
+                }
+            default:
+                condTrue = false
+            }
+            if !condTrue { break }
+        }
+        if condTrue {
+            return try evalGetterStatements(ifStmt.body.statements, env: &env)
+        }
+        switch ifStmt.elseBody {
+        case .ifStatement(let nested):
+            return try evalGetterIf(nested, env: &env)
+        case .codeBlock(let block):
+            return try evalGetterStatements(block.statements, env: &env)
+        case nil:
+            return (.void, false)
+        @unknown default:
+            return (.void, false)
+        }
     }
 
     private func evalMember(_ member: MemberAccessExprSyntax, env: Env) throws -> PreviewValue {
