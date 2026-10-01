@@ -17,6 +17,13 @@ import SwiftSyntax
 //
 // The CodeBerry canvas itself never executes SwiftData at all (P0-6 mocks);
 // this wrapper targets Xcode `#Preview`.
+//
+// 4.0.3 S12 (P0-J): the SINGLE fixture pipeline — every fixture entry
+// point goes through `pipelinePlan → validate → generate → register`.
+// The old `header + original source → write file` fallback branch in the
+// UI is deleted; a snapshot is now an explicit plan kind.
+// `plan(for:in:)` keeps its 4.0.2 contract (nil when no SwiftData) for the
+// existing tests.
 
 struct PreviewFixtureGenerator {
     struct FixturePlan: Sendable {
@@ -30,28 +37,114 @@ struct PreviewFixtureGenerator {
         let source: String
     }
 
-    /// Build a fixture plan for `viewName` from its source.
-    /// Returns nil when the source doesn't define that view, has syntax
-    /// errors, or the view doesn't use SwiftData (no wrapper needed).
+    /// 4.0.2 contract (kept): SwiftData wrapper plan, or nil when the
+    /// source doesn't define the view, has syntax errors, or the view
+    /// doesn't use SwiftData (no wrapper needed).
     static func plan(for viewName: String, in source: String) -> FixturePlan? {
+        guard let a = analyze(viewName: viewName, in: source), a.usesSwiftData else { return nil }
+        return FixturePlan(wrapperName: "\(viewName)PreviewFixture",
+                           viewName: viewName,
+                           modelTypes: a.modelTypes,
+                           source: swiftDataWrapperSource(viewName: viewName,
+                                                          wrapperName: "\(viewName)PreviewFixture",
+                                                          modelTypes: a.modelTypes))
+    }
+
+    // MARK: - S12 single pipeline: plan → validate → generate → register
+
+    enum PipelineKind: Sendable {
+        /// SwiftData-bypassing wrapper with an in-memory container.
+        case swiftDataWrapper(modelTypes: [String])
+        /// Verbatim source snapshot (the view uses no SwiftData).
+        case snapshot
+    }
+
+    struct PipelinePlan: Sendable {
+        let kind: PipelineKind
+        /// e.g. "HomeViewPreviewFixture" (wrapper) or "HomeViewFixture" (snapshot).
+        let wrapperName: String
+        let viewName: String
+        /// e.g. "HomeViewPreviewFixture.swift".
+        var fileName: String { wrapperName + ".swift" }
+    }
+
+    /// Unified plan: nil only when the source has syntax errors or doesn't
+    /// define the view. A non-SwiftData view gets an explicit snapshot plan
+    /// (never a nil that the UI branches on).
+    static func pipelinePlan(for viewName: String, in source: String) -> PipelinePlan? {
+        guard let a = analyze(viewName: viewName, in: source) else { return nil }
+        if a.usesSwiftData {
+            return PipelinePlan(kind: .swiftDataWrapper(modelTypes: a.modelTypes),
+                                wrapperName: "\(viewName)PreviewFixture",
+                                viewName: viewName)
+        }
+        return PipelinePlan(kind: .snapshot,
+                            wrapperName: "\(viewName)Fixture",
+                            viewName: viewName)
+    }
+
+    /// The plan is sound: names are non-empty and the generated source
+    /// re-parses without syntax errors.
+    static func validate(_ plan: PipelinePlan, source: String) -> Bool {
+        guard !plan.viewName.isEmpty, !plan.wrapperName.isEmpty else { return false }
+        return !Parser.parse(source: generate(plan, from: source)).hasError
+    }
+
+    /// Produce the fixture file source for a validated plan.
+    static func generate(_ plan: PipelinePlan, from source: String) -> String {
+        switch plan.kind {
+        case .swiftDataWrapper(let modelTypes):
+            return swiftDataWrapperSource(viewName: plan.viewName,
+                                          wrapperName: plan.wrapperName,
+                                          modelTypes: modelTypes)
+        case .snapshot:
+            return snapshotSource(plan: plan, source: source)
+        }
+    }
+
+    /// Write the fixture file and record it in the registry (which bumps
+    /// the cache fingerprint's fixture revision). Returns the written
+    /// project-relative path, or nil when the write failed.
+    @discardableResult
+    static func register(_ plan: PipelinePlan,
+                         source: String,
+                         project: String,
+                         registry: PreviewFixtureRegistry,
+                         writeFile: (String, String) -> Bool) -> String? {
+        let fixtureSource = generate(plan, from: source)
+        let path = "\(project)/PreviewFixtures/\(plan.fileName)"
+        guard writeFile(path, fixtureSource) else { return nil }
+        registry.register(name: plan.wrapperName, source: fixtureSource)
+        return path
+    }
+
+    // MARK: - Analysis (shared)
+
+    private static func analyze(viewName: String, in source: String)
+    -> (usesSwiftData: Bool, modelTypes: [String])? {
         let tree = Parser.parse(source: source)
         guard !tree.hasError else { return nil }
         let finder = QueryFinder(viewName: viewName)
         finder.walk(tree)
-        guard finder.foundView, finder.usesSwiftData else { return nil }
+        guard finder.foundView else { return nil }
+        return (finder.usesSwiftData, finder.modelTypes)
+    }
 
-        let wrapperName = "\(viewName)PreviewFixture"
-        let models = finder.modelTypes
-        let containerArgs = models.isEmpty
+    // MARK: - Source templates
+
+    private static func swiftDataWrapperSource(viewName: String,
+                                               wrapperName: String,
+                                               modelTypes: [String]) -> String {
+        let containerArgs = modelTypes.isEmpty
             ? "for: []"
-            : "for: [\(models.map { "\($0).self" }.joined(separator: ", "))]"
-        let modelNote = models.isEmpty
+            : "for: [\(modelTypes.map { "\($0).self" }.joined(separator: ", "))]"
+        let modelNote = modelTypes.isEmpty
             ? "\n// No @Query models were discovered in \(viewName); add your @Model\n// types to the `for:` list below if the preview needs them."
             : ""
 
-        let fileSource = """
+        return """
         // \(wrapperName).swift
-        // Preview-only fixture — generated by CodeBerry 4.0.2 (P0-7).
+        // Preview-only fixture — generated by CodeBerry 4.0.3 (single pipeline).
         //
         // SwiftData is truly bypassed: the wrapper injects an IN-MEMORY
         // container, so Xcode Previews never touch the real database and no
@@ -74,8 +167,17 @@ struct PreviewFixtureGenerator {
             \(wrapperName)()
         }
         """
-        return FixturePlan(wrapperName: wrapperName, viewName: viewName,
-                           modelTypes: models, source: fileSource)
+    }
+
+    private static func snapshotSource(plan: PipelinePlan, source: String) -> String {
+        """
+        // \(plan.fileName)
+        // Preview Fixture — generated by CodeBerry 4.0.3 (single pipeline).
+        // Source view: \(plan.viewName)
+        // Kind: snapshot (verbatim source copy; the view uses no SwiftData).
+
+        \(source)
+        """
     }
 
     // MARK: - Syntax walk
