@@ -10,10 +10,18 @@ import SwiftUI
 /// inline diagnostics.
 struct EditorPaneView: View {
     @Bindable var store: WorkspaceStore
+    /// M5: the Code tab passes false so the editor starts preview-free.
+    var previewInitiallyVisible = true
 
     @State private var controller = EditorController()
     @State private var suggestions: [LocalCompletionEngine.Suggestion] = []
-    @State private var showPreview = true
+    @State private var showPreview: Bool
+
+    init(store: WorkspaceStore, previewInitiallyVisible: Bool = true) {
+        self.store = store
+        self.previewInitiallyVisible = previewInitiallyVisible
+        self._showPreview = State(initialValue: previewInitiallyVisible)
+    }
     /// Editor/preview split, as the preview's share. Persisted; resized by
     /// dragging the canvas's Preview bar.
     @AppStorage("previewSplitFraction") private var previewFraction = 0.45

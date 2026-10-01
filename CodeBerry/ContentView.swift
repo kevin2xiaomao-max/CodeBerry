@@ -6,6 +6,7 @@ struct ContentView: View {
     @Bindable var store: WorkspaceStore
     @State private var showSettings = false
     @Bindable private var l10n = L10nService.shared
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
         // The project screen is a NavigationSplitView, which can't be pushed
@@ -13,15 +14,8 @@ struct ContentView: View {
         // with move transitions on a ZStack swap.
         ZStack {
             if store.currentProject != nil {
-                NavigationSplitView {
-                    FileNavigatorView(store: store,
-                                      onBackToProjects: { store.closeProject() })
-                } detail: {
-                    EditorPaneView(store: store)
-                        .navigationTitle(store.openFileName ?? store.currentProject ?? "CodeBerry")
-                        .navigationBarTitleDisplayMode(.inline)
-                }
-                .transition(.move(edge: .trailing))
+                projectView
+                    .transition(.move(edge: .trailing))
             } else {
                 NavigationStack {
                     ProjectsListView(store: store,
@@ -47,6 +41,29 @@ struct ContentView: View {
         .onChange(of: store.selectedPath) { _, newValue in
             if let path = newValue, !store.isDirectory(path) {
                 store.openFile(path)
+            }
+        }
+        .task {
+            // M5: restore the last session once on launch.
+            store.restoreSession()
+        }
+    }
+
+    // MARK: - M5: adaptive project layout
+
+    /// iPhone (compact): 4-tab navigation (§44). iPad (regular): split view.
+    @ViewBuilder
+    private var projectView: some View {
+        if sizeClass == .compact {
+            FourTabView(store: store)
+        } else {
+            NavigationSplitView {
+                FileNavigatorView(store: store,
+                                  onBackToProjects: { store.closeProject() })
+            } detail: {
+                EditorPaneView(store: store)
+                    .navigationTitle(store.openFileName ?? store.currentProject ?? "CodeBerry")
+                    .navigationBarTitleDisplayMode(.inline)
             }
         }
     }

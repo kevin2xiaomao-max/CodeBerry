@@ -238,6 +238,22 @@ final class WorkspaceStore {
     /// Returns the persisted session for restore-on-launch (M5 wires the UI).
     func loadSession() -> WorkspaceSession { SessionStore.load() }
 
+    /// M5: restores the last session on launch (project + open file).
+    /// Safe to call once at startup; no-ops if the project is gone.
+    func restoreSession() {
+        let session = SessionStore.load()
+        guard let folder = session.projectFolder, !folder.isEmpty else { return }
+        let url = rootURL.appendingPathComponent(folder)
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),
+              isDir.boolValue else { return }
+        openProject(folder)
+        if let openFile = session.openFilePath, !openFile.isEmpty {
+            // openFilePath is stored as a full workspace path.
+            self.openFile(openFile)
+        }
+    }
+
     func openFile(_ path: String) {
         guard path != openFilePath else { return }
         guard !isDirectory(path) else { return }

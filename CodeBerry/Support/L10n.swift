@@ -336,6 +336,12 @@ enum L10nKey: String, CaseIterable {
     case conflictBothModified  // 本地和远端都修改了此文件
     case conflictDeleteVsModify  // 一端删除、另一端修改了此文件
     case historyTitle  // 本地历史
+    // MARK: M5 — four-tab navigation
+    case filesTab  // 文件
+    case codeTab  // 代码
+    case previewTab  // 预览
+    case previewNoFile  // 未打开文件
+    case previewNoFileHint  // 在「文件」中选择一个 Swift 文件进行预览
     case historyEmpty  // 暂无历史版本
     case historyRestore  // 恢复
     case bytesUnit  // 字节
@@ -697,6 +703,11 @@ final class L10nService: @unchecked Sendable {
         .conflictBothModified: ("本地和远端都修改了此文件", "Modified both locally and remotely"),
         .conflictDeleteVsModify: ("一端删除、另一端修改了此文件", "Deleted on one side, modified on the other"),
         .historyTitle: ("本地历史", "Local History"),
+        .filesTab: ("文件", "Files"),
+        .codeTab: ("代码", "Code"),
+        .previewTab: ("预览", "Preview"),
+        .previewNoFile: ("未打开文件", "No File Open"),
+        .previewNoFileHint: ("在「文件」中选择一个 Swift 文件进行预览", "Pick a Swift file in Files to preview"),
         .historyEmpty: ("暂无历史版本", "No revisions yet"),
         .historyRestore: ("恢复", "Restore"),
         .bytesUnit: ("字节", "bytes"),
