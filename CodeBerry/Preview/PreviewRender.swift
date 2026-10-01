@@ -67,6 +67,8 @@ struct PreviewRenderContext {
     var inspector: PreviewInspectorState?
     var selectMode: Bool = false
     var onSelect: ((String) -> Void)?
+    /// M3 §18: long-press selects even outside select mode.
+    var onLongPressSelect: ((String) -> Void)?
 }
 
 /// Maps an interpreted node onto real SwiftUI views.
@@ -98,6 +100,9 @@ struct PreviewNodeView: View {
             }
         } else {
             content
+                .onLongPressGesture {
+                    if let id = node.source?.nodeID { context?.onLongPressSelect?(id) }
+                }
         }
     }
 

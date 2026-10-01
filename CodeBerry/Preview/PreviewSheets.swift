@@ -13,6 +13,10 @@ struct PreviewInspectorSheet: View {
     var readFile: ((String) -> String?)?
     var onApply: ([PreviewCanvasView.FileEdit]) -> Void
     var onClose: () -> Void
+    /// M3 §三: jump from an inspected node to its source location.
+    var onJumpToCode: ((String, Int) -> Void)?
+    /// M3 §十八: estimated cross-file references of a token.
+    var tokenRefCount: ((String) -> Int)?
 
     @State private var tokenTarget: PreviewToken?
     @State private var tokenDraftName: String?
@@ -68,16 +72,30 @@ struct PreviewInspectorSheet: View {
                     Text(l10n.t(.previewOnlyNote))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    ForEach(overriddenParams, id: \.self) { param in
+                        Button(role: .destructive) {
+                            inspector.resetParam(param, for: id)
+                        } label: {
+                            Label(l10n.t(.resetOneParam) + ": " + l10n.t(param.titleKey),
+                                  systemImage: "arrow.counterclockwise")
+                        }
+                    }
                     Button(l10n.t(.reset), role: .destructive) {
                         inspector.clearOverride(for: id)
                     }
                 }
             }
+            reorderSection
             if let s = node.source {
                 Section {
                     Text(l10n.t(.fileLine, (s.file as NSString).lastPathComponent, s.line))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    Button {
+                        onJumpToCode?(filePath, s.line)
+                    } label: {
+                        Label(l10n.t(.jumpToCode), systemImage: "arrow.right.doc.on.clipboard")
+                    }
                 }
             }
         }
@@ -295,6 +313,11 @@ struct PreviewInspectorSheet: View {
                 Text(token.qualifiedName)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
+                if let count = tokenRefCount?(token.qualifiedName) {
+                    Text(l10n.t(.tokenRefCount, count))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             Section(l10n.t(.paramFillColor)) {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 9),
@@ -708,5 +731,69 @@ struct DiffTextView: View {
         if line.hasPrefix("+") && !line.hasPrefix("+++") { return Color.green.opacity(0.08) }
         if line.hasPrefix("-") && !line.hasPrefix("---") { return Color.red.opacity(0.08) }
         return .clear
+    }
+}
+
+// MARK: - M3: modifier reorder + per-param reset (same-file extension)
+
+extension PreviewInspectorSheet {
+    /// Params that currently carry a preview-only override.
+    fileprivate var overriddenParams: [PreviewParam] {
+        guard let id = nodeID, let ov = inspector.overrides[id] else { return [] }
+        var out: [PreviewParam] = []
+        if ov.fontSize != nil { out.append(.fontSize) }
+        if ov.fontWeight != nil { out.append(.fontWeight) }
+        if ov.textColor != nil { out.append(.textColor) }
+        if ov.lineLimit != nil { out.append(.lineLimit) }
+        if ov.stackSpacing != nil { out.append(.stackSpacing) }
+        if ov.stackAlignment != nil { out.append(.stackAlignment) }
+        if ov.padding != nil { out.append(.padding) }
+        if ov.width != nil { out.append(.width) }
+        if ov.height != nil { out.append(.height) }
+        if ov.minHeight != nil { out.append(.minHeight) }
+        if ov.maxWidth != nil { out.append(.maxWidth) }
+        if ov.cornerRadius != nil { out.append(.cornerRadius) }
+        if ov.opacity != nil { out.append(.opacity) }
+        if ov.fillColor != nil { out.append(.fillColor) }
+        if ov.strokeWidth != nil { out.append(.strokeWidth) }
+        return out.filter { params.contains($0) }
+    }
+
+
+    @ViewBuilder
+    fileprivate var reorderSection: some View {
+        if let r = range,
+           let chain = PreviewSourceEditor.modifierChain(in: source, range: r),
+           chain.count > 1 {
+            Section(l10n.t(.reorderModifiers)) {
+                ForEach(chain.indices, id: \.self) { i in
+                    HStack {
+                        Text(chain[i]).font(.caption.monospaced())
+                        Spacer()
+                        if PreviewSourceEditor.reorderSafeModifiers.contains(chain[i]) {
+                            Button { moveModifier(from: i, to: i - 1) } label: {
+                                Image(systemName: "chevron.up")
+                            }.disabled(i == 0)
+                            Button { moveModifier(from: i, to: i + 1) } label: {
+                                Image(systemName: "chevron.down")
+                            }.disabled(i == chain.count - 1)
+                        } else {
+                            Text("\u{1F512}").font(.caption)
+                                .help(l10n.t(.reorderUnsafeNote))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func moveModifier(from: Int, to: Int) {
+        guard let r = range,
+              let newSource = PreviewSourceEditor.reorderModifiers(
+                source: source, range: r, from: from, to: to),
+              newSource != source else { return }
+        onApply([PreviewCanvasView.FileEdit(path: filePath,
+                                            oldSource: source,
+                                            newSource: newSource)])
     }
 }

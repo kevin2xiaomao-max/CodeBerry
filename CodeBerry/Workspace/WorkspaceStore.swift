@@ -64,6 +64,7 @@ final class WorkspaceStore {
             currentProject = lastProject
             refresh()
             rebuildSymbolIndex()
+            analyzeProject()
             if let lastFile = UserDefaults.standard.string(forKey: Self.lastOpenFileKey),
                lastFile.hasPrefix(lastProject + "/") {
                 openFile(lastFile)
@@ -117,6 +118,7 @@ final class WorkspaceStore {
         currentProject = name
         refresh()
         rebuildSymbolIndex()
+        analyzeProject()
         UserDefaults.standard.set(name, forKey: Self.lastProjectKey)
     }
 
@@ -294,6 +296,23 @@ final class WorkspaceStore {
     func rebuildSymbolIndex() {
         guard let root = previewProjectRoot() else { return }
         symbolIndex.rebuild(projectRoot: root)
+    }
+
+    // MARK: - M3 §8 ProjectAnalyzer
+
+    /// Ranked previewable pages for the open project (built in background).
+    var projectAnalysis: ProjectAnalysis?
+    private var analysisTask: Task<Void, Never>?
+
+    /// Rebuild the preview-candidates ranking off the main thread.
+    func analyzeProject() {
+        analysisTask?.cancel()
+        guard let root = previewProjectRoot() else { projectAnalysis = nil; return }
+        analysisTask = Task.detached(priority: .utility) { [weak self] in
+            let analysis = ProjectAnalyzer.analyze(root: root)
+            guard !Task.isCancelled else { return }
+            await MainActor.run { [weak self] in self?.projectAnalysis = analysis }
+        }
     }
 
     /// All files in the open project, project-relative (Quick Open).

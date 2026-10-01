@@ -40,6 +40,12 @@ final class EditorController {
         return tv.selectedRange.location
     }
 
+    /// 1-based line number of the caret (Code → Preview locate).
+    func caretLine() -> Int? {
+        guard textView != nil else { return nil }
+        return textBeforeCaret.components(separatedBy: "\n").count
+    }
+
     /// Text before the caret (for context-aware suggestions).
     var textBeforeCaret: String {
         guard let tv = textView else { return "" }

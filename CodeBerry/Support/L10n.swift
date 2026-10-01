@@ -290,6 +290,45 @@ enum L10nKey: String, CaseIterable {
     case apiName
     case resetPreviewState
     case workspaceError
+
+    // MARK: M3 — Preview Engine 2
+    case candidatesTitle       // 可预览页面
+    case searchCandidates      // 搜索页面
+    case noCandidates          // 未找到可预览页面
+    case readinessReady        // 可直接预览
+    case readinessNeedsMock    // 需要 Mock
+    case readinessMissingComponent // 缺少自定义组件支持
+    case readinessExternalPackage  // 外部 Package 不执行
+    case readinessSyntaxError  // 语法错误
+    case readinessUnsupportedRuntime // 不支持的运行时依赖
+    case actionGenerateFixture // 生成 Preview Fixture
+    case actionCreateMock      // 创建 Mock
+    case actionIgnoreNonVisual // 忽略非视觉依赖
+    case actionViewDiagnostics // 查看 Diagnostics
+    case dashboardTitle        // 兼容性总览
+    case levelSupported        // 支持
+    case levelApproximate      // 近似
+    case levelCosmeticIgnore   // 忽略
+    case levelUnsupported      // 不支持
+    case mockCenterTitle       // Mock 中心
+    case profile               // Profile
+    case mockValues            // Mock 值
+    case addProfile            // 新增 Profile
+    case profileName           // Profile 名称
+    case jumpToCode            // 跳到代码
+    case reorderModifiers      // 调整 Modifier 顺序
+    case resetOneParam         // 重置此参数
+    case tokenRefCount         // 预计影响 %d 处引用
+    case beforeAfterVisual     // 前后对比（视觉）
+    case captureBefore         // 保存修改前快照
+    case beforeLabel           // 修改前
+    case afterLabel            // 修改后
+    case locateInPreview       // 在预览中定位
+    case pages                 // 页面
+    case mockCenter            // Mock 中心
+    case compatibility         // 兼容性
+    case hideReadiness         // 不再提示
+    case reorderUnsafeNote       // 该 modifier 不支持安全重排（可能改变渲染结果）
 }
 
 /// Central localization service. Views read `L10nService.shared.t(.key)`;
@@ -595,5 +634,43 @@ final class L10nService: @unchecked Sendable {
         .apiName: ("API", "API"),
         .resetPreviewState: ("重置预览状态", "Reset Preview State"),
         .workspaceError: ("工作区错误", "Workspace Error"),
+        // M3
+        .candidatesTitle: ("可预览页面", "Previewable Pages"),
+        .searchCandidates: ("搜索页面", "Search pages"),
+        .noCandidates: ("未找到可预览页面", "No previewable pages found"),
+        .readinessReady: ("可直接预览", "Ready to preview"),
+        .readinessNeedsMock: ("需要 Mock", "Needs Mock"),
+        .readinessMissingComponent: ("缺少自定义组件支持", "Missing component support"),
+        .readinessExternalPackage: ("外部 Package 不执行", "External package not executed"),
+        .readinessSyntaxError: ("语法错误", "Syntax error"),
+        .readinessUnsupportedRuntime: ("不支持的运行时依赖", "Unsupported runtime dependency"),
+        .actionGenerateFixture: ("生成 Preview Fixture", "Generate Preview Fixture"),
+        .actionCreateMock: ("创建 Mock", "Create Mock"),
+        .actionIgnoreNonVisual: ("忽略非视觉依赖", "Ignore non-visual dependencies"),
+        .actionViewDiagnostics: ("查看 Diagnostics", "View Diagnostics"),
+        .dashboardTitle: ("兼容性总览", "Compatibility Dashboard"),
+        .levelSupported: ("支持", "Supported"),
+        .levelApproximate: ("近似", "Approximate"),
+        .levelCosmeticIgnore: ("忽略", "Ignored"),
+        .levelUnsupported: ("不支持", "Unsupported"),
+        .mockCenterTitle: ("Mock 中心", "Mock Center"),
+        .profile: ("Profile", "Profile"),
+        .mockValues: ("Mock 值", "Mock Values"),
+        .addProfile: ("新增 Profile", "Add Profile"),
+        .profileName: ("Profile 名称", "Profile name"),
+        .jumpToCode: ("跳到代码", "Jump to Code"),
+        .reorderModifiers: ("调整 Modifier 顺序", "Reorder Modifiers"),
+        .resetOneParam: ("重置此参数", "Reset this parameter"),
+        .tokenRefCount: ("预计影响 %d 处引用", "Affects ~%d references"),
+        .beforeAfterVisual: ("前后对比（视觉）", "Before / After (visual)"),
+        .captureBefore: ("保存修改前快照", "Capture Before Snapshot"),
+        .beforeLabel: ("修改前", "Before"),
+        .afterLabel: ("修改后", "After"),
+        .locateInPreview: ("在预览中定位", "Locate in Preview"),
+        .pages: ("页面", "Pages"),
+        .mockCenter: ("Mock 中心", "Mock Center"),
+        .compatibility: ("兼容性", "Compatibility"),
+        .hideReadiness: ("不再提示", "Don't show again"),
+        .reorderUnsafeNote: ("该 modifier 不支持安全重排（可能改变渲染结果）", "This modifier cannot be safely reordered (may change rendering)"),
     ]
 }

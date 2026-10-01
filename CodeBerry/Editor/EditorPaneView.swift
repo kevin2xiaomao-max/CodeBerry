@@ -27,6 +27,9 @@ struct EditorPaneView: View {
     @State private var showingDiagnostics = false
     @State private var showingProjectSearch = false
     @State private var showingReferences = false
+    // MARK: - M3: Code -> Preview locate
+    @State private var locateLine: Int?
+    @State private var locateToken: UUID?
     @State private var referenceSymbolName = ""
     @State private var referenceResults: [ReferenceHit] = []
 
@@ -239,6 +242,12 @@ struct EditorPaneView: View {
         navigateToLine = sym.line
     }
 
+    /// M3 §三 Preview → Code: jump from an inspected node to its source.
+    private func jumpToCode(path: String, line: Int) {
+        if path != store.openFilePath { store.openFile(path) }
+        navigateToLine = line
+    }
+
     private func findReferences() {
         guard let name = caretIdentifier,
               let path = store.openFilePath,
@@ -290,7 +299,10 @@ struct EditorPaneView: View {
                           projectRoot: store.previewProjectRoot(),
                           projectName: store.currentProject,
                           readFile: { store.previewFileContent($0) },
-                          store: store)
+                          store: store,
+                          locateLine: locateLine,
+                          locateToken: locateToken,
+                          onJumpToCode: { path, line in jumpToCode(path: path, line: line) })
     }
 
     private var tabBar: some View {
@@ -324,6 +336,14 @@ struct EditorPaneView: View {
                 Image(systemName: "arrow.up.right.circle")
             }
             .padding(.horizontal, 8)
+            Button {
+                locateLine = controller.caretLine()
+                locateToken = UUID()
+            } label: {
+                Image(systemName: "location.viewfinder")
+            }
+            .padding(.horizontal, 8)
+            .disabled(store.openFilePath?.hasSuffix(".swift") != true)
             Button {
                 withAnimation(.snappy) { showPreview.toggle() }
             } label: {

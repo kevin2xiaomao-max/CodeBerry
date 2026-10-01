@@ -19,6 +19,11 @@ struct PreviewCanvasView: View {
     var projectName: String?
     var readFile: ((String) -> String?)?
     @Bindable var store: WorkspaceStore
+    /// M3: Code → Preview — highlight the node at this line (bump locateToken).
+    var locateLine: Int?
+    var locateToken: UUID?
+    /// M3: Preview → Code — jump from an inspected node to its source.
+    var onJumpToCode: ((String, Int) -> Void)?
 
     /// One file rewrite for the inspector apply flow (§三).
     struct FileEdit: Identifiable {
@@ -48,6 +53,15 @@ struct PreviewCanvasView: View {
     @State private var shareItems: [Any]?
     @State private var showSnapshotDiff = false
     @State private var showWriteFailed = false
+    // MARK: - M3
+    @State private var incrementalCache = IncrementalPreview.Cache()
+    @State private var mockCenter = MockCenter()
+    @State private var showMockCenter = false
+    @State private var showDashboard = false
+    @State private var showCandidates = false
+    @State private var beforeAfter = BeforeAfterStore()
+    @State private var showVisualBeforeAfter = false
+    @State private var readinessDismissed: Set<String> = []
     @Bindable private var l10n = L10nService.shared
     @Environment(\.colorScheme) private var systemScheme
 
@@ -57,7 +71,13 @@ struct PreviewCanvasView: View {
         VStack(spacing: 0) {
             controls
             Divider()
+            readinessBanner
             canvas
+        }
+        .onChange(of: locateToken) { _, _ in locateInPreview() }
+        .onChange(of: mockCenter.activeProfile) { _, _ in
+            mockCenter.apply(to: mockStore)
+            recompute()
         }
         .background(Color(uiColor: .systemGroupedBackground))
         .task(id: source) {
@@ -111,7 +131,17 @@ struct PreviewCanvasView: View {
                                       index: projectIndex,
                                       readFile: readFile,
                                       onApply: { edits in pendingEdits = edits },
-                                      onClose: { inspector.selectedID = nil })
+                                      onClose: { inspector.selectedID = nil },
+                                      onJumpToCode: { path, line in
+                                          inspector.selectedID = nil
+                                          onJumpToCode?(path, line)
+                                      },
+                                      tokenRefCount: { [weak store] token in
+                                          guard let store else { return 0 }
+                                          return DesignTokenDetector.referenceCount(
+                                              of: token,
+                                              in: Array(store.swiftFileContents().values))
+                                      })
                     .presentationDetents([.medium, .large])
             }
         }
@@ -196,7 +226,11 @@ struct PreviewCanvasView: View {
     private var renderContext: PreviewRenderContext {
         PreviewRenderContext(inspector: inspector,
                              selectMode: selectMode,
-                             onSelect: { inspector.selectedID = $0 })
+                             onSelect: { inspector.selectedID = $0 },
+                             onLongPressSelect: {
+                                 selectMode = true
+                                 inspector.selectedID = $0
+                             })
     }
 
     private func errorView(_ message: String) -> some View {
@@ -235,6 +269,9 @@ struct PreviewCanvasView: View {
             appearanceMenu
             inspectorToggle
             mockButton
+            mockCenterButton
+            dashboardButton
+            candidatesButton
             moreMenu
 
             Button {
@@ -264,6 +301,7 @@ struct PreviewCanvasView: View {
                 }
                 .onEnded { _ in onDividerDragEnded?() }
         )
+        .sheet(isPresented: $showVisualBeforeAfter) { visualBeforeAfterSheet }
     }
 
     /// §十一 diagnostics button with error count.
@@ -363,6 +401,13 @@ struct PreviewCanvasView: View {
                 showSnapshotDiff = true
             }
             .disabled(inspector.snapshotSources[filePath ?? ""] == nil)
+            Button(l10n.t(.captureBefore), systemImage: "camera.fill") {
+                captureVisualBefore()
+            }
+            Button(l10n.t(.beforeAfterVisual), systemImage: "square.split.2x1") {
+                showVisualBeforeAfter = true
+            }
+            .disabled(!beforeAfter.hasSnapshot)
             Divider()
             Button(l10n.t(.generateFixture), systemImage: "doc.badge.plus") {
                 generateFixture()
@@ -401,25 +446,26 @@ struct PreviewCanvasView: View {
     }
 
     private func recompute() {
+        // M3 §16: incremental — unchanged views reuse cached nodes.
         do {
             let engine = PreviewEngine(source: source)
-            guard let (file, converter) = engine.parseTree() else {
+            guard engine.parseTree() != nil else {
                 throw PreviewError(.errPreviewPaused)
             }
-            var doc = PreviewDocument()
-            PreviewEngine.collect(into: &doc, from: file)
-            guard doc.previewBody != nil || !doc.viewOrder.isEmpty else {
+            let result = IncrementalPreview.evaluate(
+                source: source,
+                fileName: (filePath as NSString?)?.lastPathComponent ?? "",
+                cache: &incrementalCache,
+                runtime: runtime,
+                projectIndex: hasProjectContext ? projectIndex : nil,
+                mockStore: mockStore)
+            guard !result.nodes.isEmpty else {
                 throw PreviewError(.errNoPreviewableView)
             }
-            let evaluator = PreviewEvaluator(doc: doc, runtime: runtime)
-            evaluator.fileName = (filePath as NSString?)?.lastPathComponent ?? ""
-            evaluator.converter = converter
-            evaluator.projectIndex = hasProjectContext ? projectIndex : nil
-            evaluator.mockStore = mockStore
-            nodes = try evaluator.renderRoot()
-            diagnostics = evaluator.diagnostics
+            nodes = result.nodes
+            diagnostics = result.diagnostics
             errorMessage = nil
-            self.evaluator = evaluator
+            self.evaluator = result.evaluator
         } catch {
             errorMessage = (error as? PreviewError)?.errorDescription ?? error.localizedDescription
         }
@@ -518,6 +564,164 @@ private extension View {
             self.environment(\.colorScheme, scheme)
         } else {
             self
+        }
+    }
+}
+
+// MARK: - M3: Preview Engine 2 (canvas integration, same-file extension)
+
+extension PreviewCanvasView {
+    // MARK: Readiness (§9)
+
+    private var readinessReport: PreviewReadiness.Report? {
+        guard let path = filePath, !readinessDismissed.contains(path),
+              path.hasSuffix(".swift") else { return nil }
+        let viewName = ((path as NSString).deletingPathExtension as NSString).lastPathComponent
+        return PreviewReadiness.report(of: viewName, in: source,
+                                       knownViews: Set(projectIndex.viewsByName.keys))
+    }
+
+    @ViewBuilder
+    var readinessBanner: some View {
+        if let report = readinessReport, !report.isReady {
+            PreviewReadinessBanner(report: report) { [self] action in
+                readinessAction(action)
+            }
+        }
+    }
+
+    private func readinessAction(_ action: PreviewReadiness.Action) {
+        switch action {
+        case .generateFixture:
+            generateProjectFixture()
+        case .createMock:
+            showMockEditor = true
+        case .ignoreNonVisual:
+            if let path = filePath { readinessDismissed.insert(path) }
+        case .viewDiagnostics:
+            showDiagnostics = true
+        }
+    }
+
+    /// §9 "生成 Preview Fixture": snapshot the current file into PreviewFixtures/.
+    private func generateProjectFixture() {
+        guard let path = filePath, let project = store.currentProject else { return }
+        let name = ((path as NSString).deletingPathExtension as NSString).lastPathComponent
+        let header = "// Preview Fixture — generated by CodeBerry 4.0 (M3)\n// Source: \(path)\n\n"
+        store.writePreviewFile("\(project)/PreviewFixtures/\(name)Fixture.swift",
+                               content: header + source)
+    }
+
+    // MARK: Code → Preview (§三双向定位)
+
+    private func locateInPreview() {
+        guard let line = locateLine,
+              let id = PreviewSelection.nodeID(atLine: line, in: nodes) else { return }
+        selectMode = true
+        inspector.selectedID = id
+    }
+
+    // MARK: Before / After visual (§19)
+
+    private func captureVisualBefore() {
+        let content = VStack(spacing: 8) {
+            ForEach(nodes.indices, id: \.self) { i in
+                PreviewNodeView(node: nodes[i], runtime: runtime)
+            }
+        }
+        .frame(width: 390)
+        if let img = renderSnapshot(of: content) {
+            beforeAfter.capture(image: img, source: source)
+        }
+    }
+
+    @ViewBuilder
+    private var visualBeforeAfterSheet: some View {
+        if let snap = beforeAfter.before {
+            NavigationStack {
+                BeforeAfterView(snapshot: snap, showingBefore: $beforeAfter.showingBefore) {
+                    VStack(spacing: 8) {
+                        ForEach(nodes.indices, id: \.self) { i in
+                            PreviewNodeView(node: nodes[i], runtime: runtime)
+                        }
+                    }
+                    .frame(width: 390)
+                }
+                .navigationTitle(l10n.t(.beforeAfterVisual))
+                .navigationBarTitleDisplayMode(.inline)
+            }
+        }
+    }
+
+    // MARK: Buttons
+
+    var mockCenterButton: some View {
+        Button { showMockCenter = true } label: {
+            Image(systemName: "slider.horizontal.3")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .help(l10n.t(.mockCenter))
+        .sheet(isPresented: $showMockCenter) {
+            NavigationStack { MockCenterView(center: mockCenter) }
+        }
+    }
+
+    var dashboardButton: some View {
+        Button { showDashboard = true } label: {
+            Image(systemName: "checklist")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .help(l10n.t(.compatibility))
+        .sheet(isPresented: $showDashboard) {
+            NavigationStack { CompatibilityDashboardView() }
+        }
+    }
+
+    var candidatesButton: some View {
+        Button { showCandidates = true } label: {
+            Image(systemName: "building.2")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .help(l10n.t(.pages))
+        .sheet(isPresented: $showCandidates) { candidatesSheet }
+    }
+
+    @ViewBuilder
+    private var candidatesSheet: some View {
+        NavigationStack {
+            if let analysis = store.projectAnalysis {
+                PreviewCandidatesView(
+                    analysis: analysis,
+                    onSelect: { c in
+                        showCandidates = false
+                        if let project = store.currentProject {
+                            store.openFile(project + "/" + c.filePath)
+                        }
+                    },
+                    onGenerateFixture: { c in
+                        let wsPath = store.currentProject.map { $0 + "/" + c.filePath }
+                            ?? c.filePath
+                        let src: String
+                        if wsPath == filePath { src = source }
+                        else { src = store.previewFileContent(wsPath) ?? "" }
+                        guard !src.isEmpty else { return }
+                        let name = ((c.filePath as NSString).deletingPathExtension
+                            as NSString).lastPathComponent
+                        if let project = store.currentProject {
+                            let header = "// Preview Fixture — generated by CodeBerry 4.0 (M3)\n// Source: \(c.filePath)\n\n"
+                            store.writePreviewFile(
+                                "\(project)/PreviewFixtures/\(name)Fixture.swift",
+                                content: header + src)
+                        }
+                    },
+                    onCreateMock: { _ in showMockEditor = true },
+                    onViewDiagnostics: { _ in showDiagnostics = true })
+            } else {
+                ProgressView(l10n.t(.indexing))
+            }
         }
     }
 }

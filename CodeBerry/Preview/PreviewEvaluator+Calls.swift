@@ -180,6 +180,13 @@ extension PreviewEvaluator {
             if let viewStruct = activeViews[name] {
                 return .view(try instantiate(name: name, viewStruct: viewStruct, args: args, env: env))
             }
+            // M3 §15: registry hook — custom views render without editing
+            // the evaluator core. Only additive; falls through to the
+            // unsupported placeholder when nothing is registered.
+            if let custom = try ViewRegistry.evaluateCustom(named: name, args: args,
+                                                            evaluator: self, env: env) {
+                return custom
+            }
             diagnose(.warning, .diagFactoryUnsupported, params: [name], api: name, node: call)
             return .view(PreviewViewNode(kind: .unsupported(name)))
         }
