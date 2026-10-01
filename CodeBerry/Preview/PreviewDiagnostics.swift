@@ -4,18 +4,27 @@ import SwiftSyntax
 // MARK: - §十一 Diagnostics
 
 /// Severity levels for preview diagnostics (§十一):
-/// - Error: syntax errors, unknown identifiers — the preview may be wrong.
-/// - Warning: unsupported APIs — rendered as best-effort or skipped.
+/// - Error: syntax errors, genuinely unresolvable identifiers, evaluator
+///   fatals — the preview may be wrong.
+/// - Warning: unavailable-but-approximated APIs (SwiftData, external
+///   packages) — rendered best-effort or skipped.
+/// - Info: informational notes that don't affect the preview (e.g. a type
+///   fell back to preview defaults).
+/// - NeedsMock: the preview needs Mock/Fixture data to render fully.
 /// - Ignored: cosmetic modifiers the engine deliberately skips.
 enum PreviewDiagnosticSeverity: String, CaseIterable {
     case error
     case warning
+    case info
+    case needsMock
     case ignored
 
     var key: L10nKey {
         switch self {
         case .error: return .severityError
         case .warning: return .severityWarning
+        case .info: return .severityInfo
+        case .needsMock: return .severityNeedsMock
         case .ignored: return .severityIgnored
         }
     }
@@ -25,9 +34,14 @@ enum PreviewDiagnosticSeverity: String, CaseIterable {
         switch self {
         case .error: return "xmark.octagon.fill"
         case .warning: return "exclamationmark.triangle.fill"
+        case .info: return "info.circle.fill"
+        case .needsMock: return "tray.and.arrow.down.fill"
         case .ignored: return "eye.slash.fill"
         }
     }
+
+    /// 4.0.2 P1-9: errors block the preview; everything else is advisory.
+    var blocksPreview: Bool { self == .error }
 }
 
 /// One structured diagnostic: Chinese message (§一) + file + line + API (§十一).

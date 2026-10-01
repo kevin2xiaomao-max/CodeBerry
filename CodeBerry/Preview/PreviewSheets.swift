@@ -541,6 +541,8 @@ struct PreviewDiagnosticsSheet: View {
         switch severity {
         case .error: return .red
         case .warning: return .orange
+        case .info: return .blue
+        case .needsMock: return .yellow
         case .ignored: return .gray
         }
     }

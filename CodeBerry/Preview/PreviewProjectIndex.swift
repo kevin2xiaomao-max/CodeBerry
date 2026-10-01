@@ -48,6 +48,37 @@ enum ProjectIndexPolicy {
     static let backgroundBatchSize = 25
 }
 
+// MARK: - 4.0.2 P0-3: cross-file ordinary types
+//
+// The old index only knew `struct X: View`. Real projects reference ordinary
+// types across files (`DemoMode.shared.isEnabled`, `DemoCatalog.monthlyRevenue`)
+// which the evaluator reported as unknown-identifier errors. The index now
+// records every class/struct/enum/actor with its static members and instance
+// member type annotations — never executing anything — so member access
+// falls back to preview defaults instead of erroring.
+
+/// Cross-file ordinary type info (4.0.2 P0-3).
+struct PreviewTypeInfo {
+    enum Kind: String {
+        case `class`, `struct`, `enum`, actor
+    }
+    let name: String
+    let kind: Kind
+    let filePath: String
+    /// `static let` members with safely-evaluated literal values.
+    let staticValues: [String: PreviewValue]
+    /// Static members that exist but can't be safely evaluated
+    /// (non-literal initializers, side effects, self-references like
+    /// `static let shared = DemoMode()`).
+    let opaqueStatics: Set<String>
+    /// Instance `var`/`let` members: name → declared type annotation.
+    let instanceMembers: [String: String]
+    /// `static let shared` / `static var shared` singleton pattern.
+    var isSingleton: Bool {
+        opaqueStatics.contains("shared") || staticValues["shared"] != nil
+    }
+}
+
 /// §二 Multi-file preview: a project-wide index of View structs and design
 /// tokens. Incremental — each file is fingerprinted, only changed files are
 /// re-parsed. Capped at `ProjectIndexPolicy.maxFiles` so huge projects can't
@@ -67,6 +98,8 @@ final class PreviewProjectIndex {
         let hash: UInt64
         let views: [String: PreviewViewStruct]
         let tokens: [PreviewToken]
+        /// 4.0.2 P0-3: ordinary types by name.
+        let types: [String: PreviewTypeInfo]
     }
 
     private var files: [String: IndexedFile] = [:]
@@ -76,6 +109,8 @@ final class PreviewProjectIndex {
     private(set) var viewsByName: [String: (file: String, view: PreviewViewStruct)] = [:]
     /// All design tokens: qualified name → token.
     private(set) var tokensByName: [String: PreviewToken] = [:]
+    /// 4.0.2 P0-3: all ordinary types: name → info.
+    private(set) var typesByName: [String: PreviewTypeInfo] = [:]
 
     /// Progress UI (§二: "正在建立预览索引").
     var isIndexing = false
@@ -191,13 +226,16 @@ final class PreviewProjectIndex {
     private func rebuildLookup() {
         var views: [String: (file: String, view: PreviewViewStruct)] = [:]
         var tokens: [String: PreviewToken] = [:]
+        var types: [String: PreviewTypeInfo] = [:]
         for path in files.keys.sorted() {
             guard let entry = files[path] else { continue }
             for (name, view) in entry.views { views[name] = (path, view) }
             for token in entry.tokens { tokens[token.qualifiedName] = token }
+            for (name, info) in entry.types { types[name] = info }
         }
         viewsByName = views
         tokensByName = tokens
+        typesByName = types
     }
 
     // MARK: - Parsing (thread-safe: fresh parser per call, no shared state)
@@ -219,11 +257,16 @@ final class PreviewProjectIndex {
         PreviewEngine.collect(into: &doc, from: file)
         let tokens = PreviewEngine.extractTokens(file: file, fileName: path,
                                                  converter: converter)
+        var types: [String: PreviewTypeInfo] = [:]
+        for info in PreviewEngine.extractTypes(file: file, filePath: path) {
+            types[info.name] = info
+        }
         return ParsedFile(path: path,
                           entry: IndexedFile(path: path,
                                              hash: hash(content),
                                              views: doc.views,
-                                             tokens: tokens))
+                                             tokens: tokens,
+                                             types: types))
     }
 
     /// Parses snapshotted files on a background thread, in batches, checking

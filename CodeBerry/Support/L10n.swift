@@ -115,6 +115,8 @@ enum L10nKey: String, CaseIterable {
     case severityError
     case severityWarning
     case severityIgnored
+    case severityInfo        // 4.0.2 P1-9: 信息（不影响预览的说明）
+    case severityNeedsMock   // 4.0.2 P1-9: 需要 Mock/Fixture
     case orientation
     case portrait
     case landscape
@@ -201,6 +203,7 @@ enum L10nKey: String, CaseIterable {
     case diagModifierIgnored
     case diagMockNeeded
     case diagNoMockValue
+    case diagTypePreviewDefault   // 4.0.2 P0-3: 「%@」使用预览默认值
 
     // MARK: GitHub Direct (§8/§9, 4.0 M1)
     case githubImportTitle       // 从 GitHub 导入
@@ -496,6 +499,8 @@ final class L10nService: @unchecked Sendable {
         .severityError: ("错误", "Error"),
         .severityWarning: ("警告", "Warning"),
         .severityIgnored: ("已忽略", "Ignored"),
+        .severityInfo: ("信息", "Info"),
+        .severityNeedsMock: ("需要 Mock", "Needs Mock"),
         .orientation: ("方向", "Orientation"),
         .portrait: ("竖屏", "Portrait"),
         .landscape: ("横屏", "Landscape"),
@@ -576,6 +581,7 @@ final class L10nService: @unchecked Sendable {
         .diagModifierIgnored: ("修饰符 .%@ 暂不支持（已忽略）", "Modifier '.%@' not supported (ignored)."),
         .diagMockNeeded: ("“%@”需要 Mock 数据才能预览", "\"%@\" needs mock data to preview."),
         .diagNoMockValue: ("缺少 Mock 值：%@", "Missing mock value: %@"),
+        .diagTypePreviewDefault: ("「%@」使用预览默认值", "\"%@\" uses preview defaults"),
 
         // GitHub Direct (4.0 M1)
         .githubImportTitle: ("从 GitHub 导入", "Import from GitHub"),

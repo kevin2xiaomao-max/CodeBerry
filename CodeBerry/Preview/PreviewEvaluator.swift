@@ -15,6 +15,10 @@ indirect enum PreviewValue {
     case view(PreviewViewNode)
     case binding(String)
     case member(String)
+    /// 4.0.2 P0-3: a safely-stubbed instance of a known cross-file type
+    /// (e.g. `DemoMode.shared`). Never executes real code; member access
+    /// resolves to preview defaults from declared type annotations.
+    case typeStub(String)
     case void
 
     var doubleValue: Double? {
@@ -35,8 +39,18 @@ indirect enum PreviewValue {
         case .bool(let b): return b ? "true" : "false"
         case .array(let a): return "[" + a.map(\.display).joined(separator: ", ") + "]"
         case .member(let m): return "." + m
+        case .typeStub(let t): return t
         default: return ""
         }
+    }
+
+    /// True when the probe evaluator couldn't really build this value (e.g. a
+    /// `Type()` init call that fell through to `.unsupported`, or `.void`).
+    /// 4.0.2 P0-3: such statics stay opaque instead of pretending to have a value.
+    var isUnevaluatedPlaceholder: Bool {
+        if case .view(let node) = self, case .unsupported = node.kind { return true }
+        if case .void = self { return true }
+        return false
     }
 }
 
@@ -95,6 +109,28 @@ final class PreviewEvaluator {
         for (name, entry) in index.viewsByName { merged[name] = entry.view }
         for (name, view) in doc.views { merged[name] = view }
         return merged
+    }
+    /// 4.0.2 P0-3: all ordinary types visible to this evaluation — current
+    /// document first, then the project index.
+    var activeTypes: [String: PreviewTypeInfo] {
+        var merged = projectIndex?.typesByName ?? [:]
+        for (name, info) in doc.types { merged[name] = info }
+        return merged
+    }
+    /// 4.0.2 P0-3: preview default for a declared type name. Never executes
+    /// user code (no `didSet`, no initializers, no UserDefaults).
+    static func previewDefault(forTypeName typeName: String) -> PreviewValue {
+        switch typeName {
+        case "Bool": return .bool(false)
+        case "String": return .string("")
+        case "Int", "Int8", "Int16", "Int32", "Int64",
+             "UInt", "UInt8", "UInt16", "UInt32", "UInt64": return .number(0)
+        case "Double", "Float", "CGFloat", "Decimal": return .number(0)
+        case "Date": return .string("")
+        case let t where t.hasPrefix("[") || t.hasPrefix("Array"): return .array([])
+        case let t where t.hasPrefix("Optional"): return .void
+        default: return .void
+        }
     }
     var warnings: [String] {
         diagnostics.filter { $0.severity == .warning }.map(\.message)
@@ -339,6 +375,12 @@ final class PreviewEvaluator {
         if let token = projectIndex?.tokensByName[name] { return token.value }
         // §七 Mock fallback before giving up.
         if let mock = mockStore?.value(for: name) { return mock }
+        // 4.0.2 P0-3: a bare reference to a known cross-file type (e.g.
+        // `DemoMode`) stubs instead of erroring — never executes real code.
+        if let typeInfo = activeTypes[name] {
+            diagnose(.info, .diagTypePreviewDefault, params: [name], api: name, node: nil)
+            return .typeStub(typeInfo.name)
+        }
         diagnose(.error, .diagUnknownIdentifier, params: [name], api: name, node: nil)
         return .void
     }
@@ -378,6 +420,18 @@ final class PreviewEvaluator {
             // §六/§七 qualified lookup: `V32Layout.sectionGap` may be a design
             // token or a mock value when the base type is otherwise unknown.
             let qualified = "\(reference.baseName.text).\(name)"
+            // 4.0.2 P0-3: cross-file ordinary types — `DemoMode.shared`,
+            // `DemoCatalog.monthlyRevenue`. Static lets with literal values
+            // resolve directly; opaque statics (e.g. `shared = DemoMode()`,
+            // anything with side effects) become type stubs. Never executed.
+            if let typeInfo = activeTypes[reference.baseName.text] {
+                if let value = typeInfo.staticValues[name] { return value }
+                if typeInfo.opaqueStatics.contains(name) {
+                    // Enum cases behave like unqualified members (`.demo`).
+                    if typeInfo.kind == .enum { return .member(name) }
+                    return .typeStub(typeInfo.name)
+                }
+            }
             if let token = projectIndex?.tokensByName[qualified] { return token.value }
             if let mock = mockStore?.value(for: qualified) { return mock }
         }
@@ -390,6 +444,16 @@ final class PreviewEvaluator {
         case (.array(let a), "isEmpty"): return .bool(a.isEmpty)
         case (.color(let c), "gradient"): return .color(c)   // close enough for a preview
         case (.member, _): return .member(name)
+        case (.typeStub(let typeName), _):
+            // 4.0.2 P0-3: `DemoMode.shared.isEnabled` — resolve the declared
+            // type annotation to a preview default; never runs `didSet`.
+            if let declared = activeTypes[typeName]?.instanceMembers[name] {
+                diagnose(.info, .diagTypePreviewDefault,
+                         params: ["\(typeName).\(name)"], api: name, node: member)
+                return Self.previewDefault(forTypeName: declared)
+            }
+            diagnose(.warning, .diagMemberUnsupported, params: [name], api: name, node: member)
+            return .void
         default:
             diagnose(.warning, .diagMemberUnsupported, params: [name], api: name, node: member)
             return .void

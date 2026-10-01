@@ -79,6 +79,8 @@ struct PreviewDocument {
     var viewOrder: [String] = []
     /// Contents of a `#Preview { ... }` block, if present.
     var previewBody: CodeBlockItemListSyntax?
+    /// 4.0.2 P0-3: ordinary types (class/struct/enum/actor) in this file.
+    var types: [String: PreviewTypeInfo] = [:]
 }
 
 /// Parses Swift source into a `PreviewDocument`. Operators are folded
@@ -112,6 +114,9 @@ struct PreviewEngine {
 
     /// Collect top-level Views and #Preview bodies from a parsed tree.
     static func collect(into doc: inout PreviewDocument, from file: SourceFileSyntax) {
+        for info in extractTypes(file: file, filePath: "") {
+            doc.types[info.name] = info
+        }
         for item in file.statements {
             switch item.item {
             case .decl(let decl):
@@ -195,6 +200,84 @@ struct PreviewEngine {
             }
         }
         return tokens
+    }
+
+    // MARK: - Cross-file ordinary types (4.0.2 P0-3)
+
+    /// Extracts ordinary type declarations (class/struct/enum/actor) with
+    /// their static members and instance `var`/`let` type annotations.
+    /// Nothing is ever executed: `static let`s with literal initializers get
+    /// values via the probe evaluator; anything else (non-literal
+    /// initializers, `didSet` side effects like `DemoMode.isEnabled`'s
+    /// UserDefaults write, self-references like
+    /// `static let shared = DemoMode()`) is recorded as opaque, so the
+    /// evaluator falls back to preview defaults instead of erroring.
+    static func extractTypes(file: SourceFileSyntax, filePath: String) -> [PreviewTypeInfo] {
+        var out: [PreviewTypeInfo] = []
+        // Throwaway evaluator: only pure value expressions evaluate; anything
+        // referencing unknown identifiers throws and stays opaque.
+        let probe = PreviewEvaluator(doc: PreviewDocument(), runtime: PreviewRuntime())
+
+        func info(name: String, kind: PreviewTypeInfo.Kind,
+                  members: MemberBlockItemListSyntax,
+                  extraOpaque: Set<String> = []) -> PreviewTypeInfo {
+            var staticValues: [String: PreviewValue] = [:]
+            var opaqueStatics = extraOpaque
+            var instanceMembers: [String: String] = [:]
+            for member in members {
+                guard let varDecl = member.decl.as(VariableDeclSyntax.self) else { continue }
+                let isStatic = varDecl.modifiers.contains { $0.name.text == "static" }
+                for binding in varDecl.bindings {
+                    guard let memberName = binding.pattern
+                        .as(IdentifierPatternSyntax.self)?.identifier.text else { continue }
+                    if isStatic {
+                        if let initExpr = binding.initializer?.value,
+                           let value = try? probe.eval(initExpr, env: PreviewEvaluator.Env()),
+                           !value.isUnevaluatedPlaceholder {
+                            staticValues[memberName] = value
+                        } else {
+                            opaqueStatics.insert(memberName)
+                        }
+                    } else if let typeName = binding.typeAnnotation?.type.trimmedDescription,
+                              !typeName.isEmpty {
+                        // Only the annotation is recorded — observers like
+                        // `didSet` are never executed.
+                        instanceMembers[memberName] = typeName
+                    }
+                }
+            }
+            return PreviewTypeInfo(name: name, kind: kind, filePath: filePath,
+                                   staticValues: staticValues,
+                                   opaqueStatics: opaqueStatics,
+                                   instanceMembers: instanceMembers)
+        }
+
+        for item in file.statements {
+            guard case .decl(let decl) = item.item else { continue }
+            if let d = decl.as(ClassDeclSyntax.self) {
+                out.append(info(name: d.name.text, kind: .class,
+                                members: d.memberBlock.members))
+            } else if let d = decl.as(StructDeclSyntax.self) {
+                out.append(info(name: d.name.text, kind: .struct,
+                                members: d.memberBlock.members))
+            } else if let d = decl.as(EnumDeclSyntax.self) {
+                // Enum case names behave like static members for lookup.
+                var cases = Set<String>()
+                for member in d.memberBlock.members {
+                    if let caseDecl = member.decl.as(EnumCaseDeclSyntax.self) {
+                        for element in caseDecl.elements {
+                            cases.insert(element.name.text)
+                        }
+                    }
+                }
+                out.append(info(name: d.name.text, kind: .enum,
+                                members: d.memberBlock.members, extraOpaque: cases))
+            } else if let d = decl.as(ActorDeclSyntax.self) {
+                out.append(info(name: d.name.text, kind: .actor,
+                                members: d.memberBlock.members))
+            }
+        }
+        return out
     }
 
     private static func viewStruct(from decl: StructDeclSyntax) -> PreviewViewStruct? {
