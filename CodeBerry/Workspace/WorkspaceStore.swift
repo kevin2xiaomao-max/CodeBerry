@@ -36,6 +36,18 @@ final class WorkspaceStore {
     var selectedPath: String?
     private(set) var openTabs: [String] = []
     private(set) var openFilePath: String?
+    /// Pending Preview → Code line jump (P1-1). Set when FourTabView handles
+    /// `.codeBerryJumpToCode`; consumed by EditorPaneView.
+    private(set) var pendingLineJump: Int?
+
+    /// Requests a line jump in the open file. Consumed by EditorPaneView.
+    func requestLineJump(_ line: Int) { pendingLineJump = line }
+
+    /// Consumes the pending line jump, if any.
+    func consumeLineJump() -> Int? {
+        defer { pendingLineJump = nil }
+        return pendingLineJump
+    }
     private(set) var isDirty = false
     var lastError: String?
     /// Project-wide Swift symbol index (M2: Quick Open / completion /

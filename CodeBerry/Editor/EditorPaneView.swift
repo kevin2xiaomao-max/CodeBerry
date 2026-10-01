@@ -166,6 +166,15 @@ struct EditorPaneView: View {
                 Text(L10nService.shared.t(.noFileOpenDesc))
             }
         }
+        // P1-1: consume Preview → Code line jumps requested via the store.
+        .onChange(of: store.pendingLineJump) { _, _ in consumeLineJump() }
+        .onAppear { consumeLineJump() }
+    }
+
+    /// P1-1: applies a pending Preview → Code line jump to the editor.
+    private func consumeLineJump() {
+        guard let line = store.consumeLineJump() else { return }
+        navigateToLine = line
     }
 
     // MARK: - Editor

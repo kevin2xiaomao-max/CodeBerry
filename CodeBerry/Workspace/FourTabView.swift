@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 // MARK: - M5: Four-tab navigation (iPhone)
 //
@@ -47,6 +48,13 @@ struct FourTabView: View {
             // Jump to Code when a file is opened from the Files tab.
             if newPath != nil { selectedTab = 1 }
         }
+        // P1-1: Preview → Code jumps. The notification carries a
+        // CodeJumpRequest; switch to the Code tab, open the file, and let
+        // the editor consume the pending line jump.
+        .onReceive(NotificationCenter.default.publisher(for: .codeBerryJumpToCode)) { note in
+            guard let request = note.object as? CodeJumpRequest else { return }
+            selectedTab = store.handleCodeJumpRequest(request)
+        }
     }
 }
 
@@ -68,12 +76,13 @@ struct PreviewTabView: View {
                     projectName: store.currentProject,
                     readFile: { store.previewFileContent($0) },
                     store: store,
-                    onJumpToCode: { _, _ in
-                        // M5: jumping to code switches to the Code tab.
-                        // (The actual file/line navigation is handled by
-                        // EditorPaneView via the store.)
+                    onJumpToCode: { path, line in
+                        // P1-1: carry the real target; FourTabView switches to
+                        // the Code tab, opens the file, and the editor jumps
+                        // to the line via the store.
                         NotificationCenter.default.post(
-                            name: .codeBerryJumpToCode, object: nil)
+                            name: .codeBerryJumpToCode,
+                            object: CodeJumpRequest(path: path, line: line))
                     })
             } else {
                 ContentUnavailableView(
@@ -243,4 +252,23 @@ struct ChangesTabContainer: View {
 
 extension Notification.Name {
     static let codeBerryJumpToCode = Notification.Name("codeBerryJumpToCode")
+}
+
+/// Payload for `.codeBerryJumpToCode`: Preview → Code navigation request.
+/// `path` is workspace-relative (matches `WorkspaceStore.openFilePath`).
+struct CodeJumpRequest: Equatable {
+    let path: String
+    let line: Int
+}
+
+extension WorkspaceStore {
+    /// Handles a Preview → Code jump request (P1-1): opens the file and
+    /// requests the line jump the editor will consume. Returns the Code
+    /// tab index for the TabView to select.
+    @discardableResult
+    func handleCodeJumpRequest(_ request: CodeJumpRequest) -> Int {
+        openFile(request.path)
+        requestLineJump(request.line)
+        return 1 // Code tab
+    }
 }
