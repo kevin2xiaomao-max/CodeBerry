@@ -66,7 +66,7 @@ struct PreviewViewStruct {
     let properties: [PreviewProperty]
     let bodyStatements: CodeBlockItemListSyntax?
     /// Computed subviews (`var xxx: some View`), excluding `body`.
-    var computedViews: [PreviewComputedView] = [:]
+    var computedViews: [String: PreviewComputedView] = [:]
     /// Helper functions returning `some View`.
     var functions: [String: PreviewFunction] = [:]
     /// External dependencies that need Mock data to preview (§七).

@@ -88,7 +88,7 @@ struct PreviewInspectorSheet: View {
         switch param {
         case .fontSize:
             doubleRow(param, value: ov.fontSize ?? currentDouble(param),
-                      bounds: 8...72, step: 1) { set { $0.fontSize = $1 } }
+                      bounds: 8...72, step: 1, set: set { $0.fontSize = $1 })
         case .fontWeight:
             weightRow
         case .textColor:
@@ -105,27 +105,27 @@ struct PreviewInspectorSheet: View {
             }
         case .stackSpacing:
             doubleRow(param, value: ov.stackSpacing ?? currentDouble(param),
-                      bounds: 0...64, step: 2) { set { $0.stackSpacing = $1 } }
+                      bounds: 0...64, step: 2, set: set { $0.stackSpacing = $1 })
         case .stackAlignment:
             alignmentRow
         case .padding:
             doubleRow(param, value: ov.padding ?? currentDouble(param),
-                      bounds: 0...64, step: 2) { set { $0.padding = $1 } }
+                      bounds: 0...64, step: 2, set: set { $0.padding = $1 })
         case .width:
             doubleRow(param, value: ov.width ?? currentDouble(param),
-                      bounds: 0...800, step: 10) { set { $0.width = $1 } }
+                      bounds: 0...800, step: 10, set: set { $0.width = $1 })
         case .height:
             doubleRow(param, value: ov.height ?? currentDouble(param),
-                      bounds: 0...800, step: 10) { set { $0.height = $1 } }
+                      bounds: 0...800, step: 10, set: set { $0.height = $1 })
         case .minHeight:
             doubleRow(param, value: ov.minHeight ?? currentDouble(param),
-                      bounds: 0...800, step: 10) { set { $0.minHeight = $1 } }
+                      bounds: 0...800, step: 10, set: set { $0.minHeight = $1 })
         case .maxWidth:
             doubleRow(param, value: ov.maxWidth ?? currentDouble(param),
-                      bounds: 0...1200, step: 10) { set { $0.maxWidth = $1 } }
+                      bounds: 0...1200, step: 10, set: set { $0.maxWidth = $1 })
         case .cornerRadius:
             doubleRow(param, value: ov.cornerRadius ?? currentDouble(param),
-                      bounds: 0...64, step: 2) { set { $0.cornerRadius = $1 } }
+                      bounds: 0...64, step: 2, set: set { $0.cornerRadius = $1 })
         case .opacity:
             opacityRow
         case .fillColor:
@@ -136,7 +136,7 @@ struct PreviewInspectorSheet: View {
             }
         case .strokeWidth:
             doubleRow(param, value: ov.strokeWidth ?? currentDouble(param),
-                      bounds: 0...20, step: 1) { set { $0.strokeWidth = $1 } }
+                      bounds: 0...20, step: 1, set: set { $0.strokeWidth = $1 })
         }
     }
 
@@ -432,21 +432,21 @@ struct PreviewInspectorSheet: View {
         }
         guard let id = nodeID, let range, let o = inspector.overrides[id] else { return }
         var params: [PreviewSourceEditor.ParamEdit] = []
-        if let v = o.fontSize { params.append(.editFontSize(v)) }
-        if let w = o.fontWeight { params.append(.editFontWeight(w)) }
-        if let c = o.textColor { params.append(.editTextColor(c.toSource())) }
-        if let n = o.lineLimit { params.append(.editLineLimit(n)) }
-        if let v = o.stackSpacing { params.append(.editStackSpacing(v)) }
-        if let a = o.stackAlignment { params.append(.editStackAlignment(a)) }
-        if let v = o.padding { params.append(.editPadding(v)) }
-        if let v = o.width { params.append(.editFrame(label: "width", value: v)) }
-        if let v = o.height { params.append(.editFrame(label: "height", value: v)) }
-        if let v = o.minHeight { params.append(.editFrame(label: "minHeight", value: v)) }
-        if let v = o.maxWidth { params.append(.editFrame(label: "maxWidth", value: v)) }
-        if let v = o.cornerRadius { params.append(.editCornerRadius(v)) }
-        if let v = o.opacity { params.append(.editOpacity(v)) }
-        if let c = o.fillColor { params.append(.editFillColor(c.toSource())) }
-        if let v = o.strokeWidth { params.append(.editStrokeWidth(v)) }
+        if let v = o.fontSize { params.append(PreviewSourceEditor.editFontSize(v)) }
+        if let w = o.fontWeight { params.append(PreviewSourceEditor.editFontWeight(w)) }
+        if let c = o.textColor { params.append(PreviewSourceEditor.editTextColor(c.toSource())) }
+        if let n = o.lineLimit { params.append(PreviewSourceEditor.editLineLimit(n)) }
+        if let v = o.stackSpacing { params.append(PreviewSourceEditor.editStackSpacing(v)) }
+        if let a = o.stackAlignment { params.append(PreviewSourceEditor.editStackAlignment(a)) }
+        if let v = o.padding { params.append(PreviewSourceEditor.editPadding(v)) }
+        if let v = o.width { params.append(PreviewSourceEditor.editFrame(label: "width", value: v)) }
+        if let v = o.height { params.append(PreviewSourceEditor.editFrame(label: "height", value: v)) }
+        if let v = o.minHeight { params.append(PreviewSourceEditor.editFrame(label: "minHeight", value: v)) }
+        if let v = o.maxWidth { params.append(PreviewSourceEditor.editFrame(label: "maxWidth", value: v)) }
+        if let v = o.cornerRadius { params.append(PreviewSourceEditor.editCornerRadius(v)) }
+        if let v = o.opacity { params.append(PreviewSourceEditor.editOpacity(v)) }
+        if let c = o.fillColor { params.append(PreviewSourceEditor.editFillColor(c.toSource())) }
+        if let v = o.strokeWidth { params.append(PreviewSourceEditor.editStrokeWidth(v)) }
         guard let newSource = PreviewSourceEditor.applyParamEdits(params, source: source, range: range),
               newSource != source else { return }
         onApply([PreviewCanvasView.FileEdit(path: filePath, oldSource: source, newSource: newSource)])

@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import UIKit
 
 /// §九 Patch export: unified diffs and `.patch` files. Export only —

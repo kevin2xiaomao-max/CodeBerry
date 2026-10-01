@@ -59,8 +59,9 @@ struct SettingsView: View {
     }
 
     private var workspacePath: String {
+        let root = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         do {
-            return try LiteWorkspace.resolve("").path
+            return try LiteWorkspace(root: root).resolve("").path
         } catch {
             return "—"
         }

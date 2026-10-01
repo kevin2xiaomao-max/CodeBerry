@@ -70,7 +70,7 @@ enum PreviewAppearance: String, CaseIterable {
 
 /// Per-canvas settings: device, orientation, safe-area overlay, appearance.
 @Observable
-final class PreviewCanvasSettings {
+final class PreviewCanvasSettings: @unchecked Sendable {
     /// Shared instance so the Settings screen and the canvas stay in sync.
     static let shared = PreviewCanvasSettings()
 

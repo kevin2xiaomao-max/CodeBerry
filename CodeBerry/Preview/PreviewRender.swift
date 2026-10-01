@@ -80,7 +80,8 @@ struct PreviewNodeView: View {
         let displayNode = context?.inspector?.applied(to: node) ?? node
         let content = Self.applying(displayNode.modifiers,
                                     to: AnyView(base(for: displayNode)),
-                                    runtime: runtime)
+                                    runtime: runtime,
+                                    context: context)
         if let context, context.selectMode {
             // In select mode taps select the element instead of activating it.
             ZStack {
@@ -212,7 +213,9 @@ struct PreviewNodeView: View {
 
     // MARK: Modifier application
 
-    static func applying(_ ops: [PreviewModifierOp], to view: AnyView, runtime: PreviewRuntime) -> AnyView {
+    static func applying(_ ops: [PreviewModifierOp], to view: AnyView,
+                         runtime: PreviewRuntime,
+                         context: PreviewRenderContext? = nil) -> AnyView {
         var v = view
         for op in ops {
             switch op {

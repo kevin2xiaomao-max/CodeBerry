@@ -200,7 +200,7 @@ enum L10nKey: String, CaseIterable {
 /// Central localization service. Views read `L10nService.shared.t(.key)`;
 /// because the service is `@Observable`, changing `language` re-renders.
 @Observable
-final class L10nService {
+final class L10nService: @unchecked Sendable {
     static let shared = L10nService()
 
     private let defaultsKey = "codeberry.appLanguage"

@@ -280,7 +280,7 @@ struct PreviewCanvasView: View {
                         .font(.caption2.monospacedDigit())
                 }
             }
-            .foregroundStyle(errors.isEmpty ? .secondary : .orange)
+            .foregroundStyle(errors.isEmpty ? Color.secondary : Color.orange)
         }
         .help(l10n.t(.diagnostics))
     }
