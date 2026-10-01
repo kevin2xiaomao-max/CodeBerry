@@ -64,6 +64,21 @@ extension PreviewEvaluator {
                 default: break
                 }
             }
+            // 4.0.3 S2 (P0-D): method calls on a system stub —
+            // `Calendar.current.component(.hour, from: Date())`. Safe
+            // approximations, memoized per evaluation pass.
+            if case .system(let typeName) = baseValue {
+                let values = try args.map { ($0.label, try eval($0.expr, env: env)) }
+                if let (approx, note) = PreviewSystemRegistry.call(
+                    type: typeName, method: name, args: values) {
+                    let result = systemApproximation(
+                        key: "\(typeName).\(name).\(values.map(\.1.display).joined(separator: ","))",
+                        make: { approx })
+                    diagnose(.info, .diagSystemApproximation,
+                             params: ["\(typeName).\(name)", note], api: name, node: call)
+                    return result
+                }
+            }
             diagnose(.warning, .diagMethodUnsupported, params: [name], api: name, node: call)
             return .void
         }
@@ -257,6 +272,19 @@ extension PreviewEvaluator {
                 .map { try eval($0.expr, env: env) }?.display ?? ""
             return .view(PreviewViewNode(kind: .text(
                 linkTitle.isEmpty ? "Link" : linkTitle)))
+
+        // 4.0.3 S2 (P0-D): Foundation/system constructors — `Date()`,
+        // `UUID()`, `URL(string:)`. Safe approximations via the registry.
+        case "Date", "UUID", "URL", "Calendar", "Locale", "TimeZone", "DateComponents":
+            let values = try args.map { ($0.label, try eval($0.expr, env: env)) }
+            if let (approx, note) = PreviewSystemRegistry.construct(type: name, args: values) {
+                let result = systemApproximation(
+                    key: "\(name).\(values.map(\.1.display).joined(separator: ","))",
+                    make: { approx })
+                diagnose(.info, .diagSystemApproximation,
+                         params: ["\(name)(…)", note], api: name, node: call)
+                return result
+            }
 
         default:
             // 4.0.2 P0-2: cross-file component resolution order —

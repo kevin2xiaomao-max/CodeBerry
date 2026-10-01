@@ -19,6 +19,10 @@ indirect enum PreviewValue {
     /// (e.g. `DemoMode.shared`). Never executes real code; member access
     /// resolves to preview defaults from declared type annotations.
     case typeStub(String)
+    /// 4.0.3 S2 (P0-D): a safely-stubbed Foundation/system type instance
+    /// (e.g. `Calendar.current`). Approximated via PreviewSystemRegistry;
+    /// never executes real system APIs.
+    case system(String)
     case void
 
     var doubleValue: Double? {
@@ -40,6 +44,7 @@ indirect enum PreviewValue {
         case .array(let a): return "[" + a.map(\.display).joined(separator: ", ") + "]"
         case .member(let m): return "." + m
         case .typeStub(let t): return t
+        case .system(let t): return t
         default: return ""
         }
     }
@@ -143,6 +148,17 @@ final class PreviewEvaluator {
     var converter: SourceLocationConverter?
     /// §七 Mock data store, set by the canvas.
     var mockStore: PreviewMockStore?
+    /// 4.0.3 S2 (P0-D): memoizes system approximations for one evaluation
+    /// pass — the same preview never sees the hour flip mid-render.
+    private var systemApproxCache: [String: PreviewValue] = [:]
+
+    /// Returns the cached approximation for `key`, computing it once.
+    func systemApproximation(key: String, make: () -> PreviewValue) -> PreviewValue {
+        if let cached = systemApproxCache[key] { return cached }
+        let value = make()
+        systemApproxCache[key] = value
+        return value
+    }
 
     /// §三 Source info for a syntax node (nil when no converter is set).
     func sourceInfo(for node: some SyntaxProtocol) -> PreviewSourceInfo? {
@@ -417,6 +433,16 @@ final class PreviewEvaluator {
             case "Double", "CGFloat", "Float":
                 if name == "infinity" { return .number(.infinity) }
                 if name == "pi" { return .number(.pi) }
+            // 4.0.3 S2 (P0-D): Foundation/system types via the registry —
+            // `Calendar.current`, `Locale.current`. Safe approximations.
+            case "Calendar", "Date", "Locale", "TimeZone", "UUID", "URL", "DateComponents":
+                if let (value, note) = PreviewSystemRegistry.staticMember(
+                    of: reference.baseName.text, name: name) {
+                    diagnose(.info, .diagSystemApproximation,
+                             params: ["\(reference.baseName.text).\(name)", note],
+                             api: name, node: member)
+                    return value
+                }
             default:
                 break
             }
@@ -454,6 +480,16 @@ final class PreviewEvaluator {
                 diagnose(.info, .diagTypePreviewDefault,
                          params: ["\(typeName).\(name)"], api: name, node: member)
                 return Self.previewDefault(forTypeName: declared)
+            }
+            diagnose(.warning, .diagMemberUnsupported, params: [name], api: name, node: member)
+            return .void
+        case (.system(let typeName), _):
+            // 4.0.3 S2 (P0-D): `UUID().uuidString`, `date.isToday` — via the
+            // registry; unregistered members warn, never error.
+            if let (value, note) = PreviewSystemRegistry.member(of: typeName, name: name) {
+                diagnose(.info, .diagSystemApproximation,
+                         params: ["\(typeName).\(name)", note], api: name, node: member)
+                return value
             }
             diagnose(.warning, .diagMemberUnsupported, params: [name], api: name, node: member)
             return .void
