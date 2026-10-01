@@ -83,43 +83,19 @@ struct ProjectAnalysis: Sendable {
 /// `isCancelled` is polled between files so background indexing stays
 /// cancellable (§26). Never throws — one broken file never poisons the rest.
 struct ProjectAnalyzer {
-    /// 4.0.2 P0-1: file cap unified via `ProjectIndexPolicy` (was a private
-    /// 1000 that disagreed with the preview index's 100).
-    static var maxFiles: Int { ProjectIndexPolicy.maxFiles }
-    private static let skipDirNames: Set<String> = [
-        ".git", ".build", "Pods", "DerivedData", ".swiftpm",
-        "Carthage", "node_modules", "fastlane",
-    ]
     /// Heuristic: type names that usually hold design tokens.
     private static let tokenTypeSuffixes = ["Tokens", "Token", "Layout", "Colors", "Typography", "Spacing", "Radius", "Shadows"]
 
     static func analyze(root: URL, isCancelled: @escaping @Sendable () -> Bool = { false }) -> ProjectAnalysis {
-        let fm = FileManager.default
-        var kind: ProjectKind = .unknown
-        var swiftFiles: [URL] = []
-        var relPaths: [String] = []
+        // 4.0.3 S11 (P0-I): file enumeration (exclusions, cap, source
+        // roots) comes from the shared policy — the Analyzer, the index,
+        // and Page Discovery always agree on the file set.
+        let policy = PreviewProjectFilePolicy.default
+        let (listed, kind) = policy.swiftFiles(under: root, isCancelled: isCancelled)
+        let swiftFiles = listed.map(\.url)
+        let relPaths = listed.map(\.rel)
         let rootPath = root.path
-
-        if let enumerator = fm.enumerator(at: root, includingPropertiesForKeys: [.isDirectoryKey],
-                                         options: [.skipsHiddenFiles]) {
-            for case let url as URL in enumerator {
-                if isCancelled() { break }
-                let name = url.lastPathComponent
-                if skipDirNames.contains(name) {
-                    enumerator.skipDescendants()
-                    continue
-                }
-                if url.pathExtension == "xcodeproj" { kind = .xcodeproj }
-                else if url.pathExtension == "xcworkspace" { kind = .xcworkspace }
-                else if name == "Package.swift" && kind == .unknown { kind = .packageSwift }
-                if url.pathExtension == "swift" {
-                    swiftFiles.append(url)
-                    relPaths.append(relativePath(of: url, rootPath: rootPath))
-                }
-                if swiftFiles.count >= maxFiles { break }
-            }
-        }
-        let truncated = swiftFiles.count >= maxFiles
+        let truncated = listed.count >= policy.maxFiles
 
         var candidates: [PreviewCandidate] = []
         var tokens: [DesignToken] = []
@@ -194,12 +170,6 @@ struct ProjectAnalyzer {
                                customViews: views.sorted(), viewModifiers: modifiers.sorted(),
                                shapes: shapes.sorted(), fileCount: swiftFiles.count,
                                truncated: truncated)
-    }
-
-    private static func relativePath(of url: URL, rootPath: String) -> String {
-        let p = url.path
-        if p.hasPrefix(rootPath + "/") { return String(p.dropFirst(rootPath.count + 1)) }
-        return url.lastPathComponent
     }
 
     // MARK: - Syntax collection

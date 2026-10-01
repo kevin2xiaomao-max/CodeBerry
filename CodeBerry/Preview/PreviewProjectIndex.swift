@@ -473,27 +473,14 @@ final class PreviewProjectIndex {
         let meta: FileMeta
     }
 
+    /// 4.0.3 S11 (P0-I): enumeration is owned by `PreviewProjectFilePolicy`
+    /// so the Analyzer, the index, and Page Discovery always agree on the
+    /// file set (excluded dirs, cap, source roots).
     private static func swiftFiles(under root: URL, projectName: String) -> [ListedFile] {
-        var out: [ListedFile] = []
-        let fm = FileManager.default
-        let keys: [URLResourceKey] = [.isRegularFileKey,
-                                      .contentModificationDateKey,
-                                      .fileSizeKey]
-        guard let enumerator = fm.enumerator(at: root,
-                                            includingPropertiesForKeys: keys,
-                                            options: [.skipsHiddenFiles]) else { return [] }
-        for case let url as URL in enumerator {
-            guard url.pathExtension == "swift" else { continue }
-            var rel = url.path
-            let prefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
-            if rel.hasPrefix(prefix) { rel = String(rel.dropFirst(prefix.count)) }
-            let values = try? url.resourceValues(forKeys: Set(keys))
-            let meta = FileMeta(mtime: values?.contentModificationDate ?? .distantPast,
-                                size: values?.fileSize ?? -1)
-            out.append(ListedFile(path: projectName + "/" + rel, url: url, meta: meta))
-            if out.count >= ProjectIndexPolicy.maxFiles { break }
+        PreviewProjectFilePolicy.default.swiftFiles(under: root).files.map {
+            ListedFile(path: projectName + "/" + $0.rel, url: $0.url,
+                       meta: FileMeta(mtime: $0.mtime, size: $0.size))
         }
-        return out.sorted { $0.path < $1.path }
     }
 
     /// FNV-1a over UTF-8 bytes — cheap content hash for change detection.
