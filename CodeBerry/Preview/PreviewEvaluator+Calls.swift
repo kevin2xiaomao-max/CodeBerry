@@ -297,8 +297,21 @@ extension PreviewEvaluator {
                          params: ["\(name)(…)", note], api: name, node: call)
                 return result
             }
+            // The registry only declines for names outside its table (the
+            // switch above already matched); keep the compiler-honest path
+            // on the standard resolution.
+            return try resolveFactoryDefault(named: name, call: call, args: args, env: env)
 
         default:
+            return try resolveFactoryDefault(named: name, call: call, args: args, env: env)
+        }
+    }
+
+    /// The standard factory-call resolution (4.0.2 P0-2 order): current
+    /// file → project index → ViewRegistry → external package → placeholder.
+    private func resolveFactoryDefault(named name: String, call: FunctionCallExprSyntax,
+                                       args: [(label: String?, expr: ExprSyntax)],
+                                       env: Env) throws -> PreviewValue {
             // 4.0.2 P0-2: cross-file component resolution order —
             //   1. current file (`doc`, wins via `activeViews` merge),
             //   2. project index (`PreviewProjectIndex`, unified 1000-file cap),
@@ -330,7 +343,6 @@ extension PreviewEvaluator {
             }
             diagnose(.warning, .diagFactoryUnsupported, params: [name], api: name, node: call)
             return .view(PreviewViewNode(kind: .unsupported(name)))
-        }
     }
 
     // MARK: - 4.0.2 P1-8: external packages
