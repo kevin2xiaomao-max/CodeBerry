@@ -22,7 +22,7 @@ final class WorkspaceFlowUITests: XCTestCase {
 
     private var tabBar: XCUIElement { app.tabBars.firstMatch }
 
-    private func tapTab(index: Int, file: String = #filePath, line: UInt = #line) {
+    private func tapTab(index: Int, file: StaticString = #filePath, line: UInt = #line) {
         let button = tabBar.buttons.element(boundBy: index)
         XCTAssertTrue(button.waitForExistence(timeout: 10),
                       "tab \(index) missing", file: file, line: line)
@@ -31,14 +31,14 @@ final class WorkspaceFlowUITests: XCTestCase {
                       "tab \(index) not selected", file: file, line: line)
     }
 
-    private func assertInWorkspace(file: String = #filePath, line: UInt = #line) {
+    private func assertInWorkspace(file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertTrue(tabBar.waitForExistence(timeout: 15),
                       "expected the 4-tab workspace", file: file, line: line)
         XCTAssertEqual(tabBar.buttons.count, 4,
                        "workspace must keep exactly 4 tabs", file: file, line: line)
     }
 
-    private func assertInProjects(file: String = #filePath, line: UInt = #line) {
+    private func assertInProjects(file: StaticString = #filePath, line: UInt = #line) {
         let row = app.buttons["project-row-Welcome"]
         XCTAssertTrue(row.waitForExistence(timeout: 15),
                       "expected the Projects list", file: file, line: line)
@@ -47,7 +47,7 @@ final class WorkspaceFlowUITests: XCTestCase {
     /// Opens the unified workspace title menu (P0-1) by tapping the
     /// navigation-bar title, then taps Back to Projects.
     private func backToProjectsViaTitleMenu(titleLabels: [String],
-                                            file: String = #filePath,
+                                            file: StaticString = #filePath,
                                             line: UInt = #line) {
         let navBar = app.navigationBars.firstMatch
         XCTAssertTrue(navBar.waitForExistence(timeout: 10),
