@@ -86,6 +86,10 @@ struct ProjectAnalyzer {
     /// Heuristic: type names that usually hold design tokens.
     private static let tokenTypeSuffixes = ["Tokens", "Token", "Layout", "Colors", "Typography", "Spacing", "Radius", "Shadows"]
 
+    /// The file cap the analyzer enforces — sourced from the shared
+    /// policy, so it can never drift from the index cap (4.0.3 S11 P0-I).
+    static var maxFiles: Int { PreviewProjectFilePolicy.default.maxFiles }
+
     static func analyze(root: URL, isCancelled: @escaping @Sendable () -> Bool = { false }) -> ProjectAnalysis {
         // 4.0.3 S11 (P0-I): file enumeration (exclusions, cap, source
         // roots) comes from the shared policy — the Analyzer, the index,
