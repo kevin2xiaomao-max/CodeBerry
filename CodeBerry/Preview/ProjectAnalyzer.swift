@@ -83,8 +83,9 @@ struct ProjectAnalysis: Sendable {
 /// `isCancelled` is polled between files so background indexing stays
 /// cancellable (§26). Never throws — one broken file never poisons the rest.
 struct ProjectAnalyzer {
-    /// §26: hard cap so a huge repo can't freeze the UI.
-    static let maxFiles = 1000
+    /// 4.0.2 P0-1: file cap unified via `ProjectIndexPolicy` (was a private
+    /// 1000 that disagreed with the preview index's 100).
+    static var maxFiles: Int { ProjectIndexPolicy.maxFiles }
     private static let skipDirNames: Set<String> = [
         ".git", ".build", "Pods", "DerivedData", ".swiftpm",
         "Carthage", "node_modules", "fastlane",

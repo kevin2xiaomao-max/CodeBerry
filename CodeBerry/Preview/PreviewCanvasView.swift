@@ -86,7 +86,7 @@ struct PreviewCanvasView: View {
                 try? await Task.sleep(for: .milliseconds(450))
                 guard !Task.isCancelled else { return }
             }
-            updateIndex()
+            await updateIndex()
             recompute()
             hasRendered = true
         }
@@ -432,17 +432,29 @@ struct PreviewCanvasView: View {
 
     // MARK: - Interpretation
 
-    private func updateIndex() {
+    /// 4.0.2 P0-1 / P1-11: cold start indexes on a background thread
+    /// (cancellable via the hosting `.task`, current file first); warm
+    /// passes are incremental and hash-gated — never a full synchronous
+    /// re-parse per keystroke.
+    private func updateIndex() async {
         guard hasProjectContext,
               let root = projectRoot, let name = projectName, let readFile else { return }
-        if !indexBuilt { projectIndex.isIndexing = true }
-        projectIndex.update(projectRoot: root,
-                            projectName: name,
-                            currentPath: filePath,
-                            currentSource: source,
-                            readFile: readFile)
-        projectIndex.isIndexing = false
-        indexBuilt = true
+        if !indexBuilt {
+            projectIndex.isIndexing = true
+            await projectIndex.rebuildInBackground(projectRoot: root,
+                                                   projectName: name,
+                                                   currentPath: filePath,
+                                                   currentSource: source,
+                                                   readFile: readFile)
+            projectIndex.isIndexing = false
+            indexBuilt = true
+        } else {
+            projectIndex.update(projectRoot: root,
+                                projectName: name,
+                                currentPath: filePath,
+                                currentSource: source,
+                                readFile: readFile)
+        }
     }
 
     private func recompute() {
@@ -512,8 +524,10 @@ struct PreviewCanvasView: View {
         }
         if !ok { showWriteFailed = true }
         inspector.selectedID = nil
-        updateIndex()
-        recompute()
+        Task {
+            await updateIndex()
+            recompute()
+        }
     }
 
     /// Mock requirements of the rendered root view (§七).

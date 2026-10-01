@@ -30,12 +30,37 @@ struct PreviewToken {
     let declEndOffset: Int
 }
 
+// MARK: - 4.0.2 P0-1: unified project-index policy
+//
+// `ProjectAnalyzer.maxFiles` (1000) and `PreviewProjectIndex.maxFiles` (100)
+// disagreed, so the readiness list could name files the preview index never
+// parsed (V35/V36 components in a 233-file project fell past the cap and
+// rendered as `[?]`). One policy now governs both; the preview index
+// additionally runs incrementally (content-hash gated), on a background
+// thread for cold starts, cancellable, with the current file parsed first.
+
+/// Single source of truth for project-index limits (4.0.2 P0-1).
+enum ProjectIndexPolicy {
+    /// Max Swift files indexed per project. Matches the analyzer so the
+    /// readiness list and the preview index never disagree on coverage.
+    static let maxFiles = 1000
+    /// Files parsed per background batch; each batch checks cancellation.
+    static let backgroundBatchSize = 25
+}
+
 /// §二 Multi-file preview: a project-wide index of View structs and design
 /// tokens. Incremental — each file is fingerprinted, only changed files are
-/// re-parsed. Capped at `maxFiles` so huge projects can't stall the canvas.
+/// re-parsed. Capped at `ProjectIndexPolicy.maxFiles` so huge projects can't
+/// stall the canvas.
+///
+/// 4.0.2 P0-1 / P1-11: cold-start indexing runs on a background thread
+/// (`rebuildInBackground`, cancellable via the hosting `.task`, current file
+/// first); warm passes stay synchronous but hash-gated, so per-keystroke work
+/// is O(changed files), never a full re-parse.
 @Observable
 final class PreviewProjectIndex {
-    static let maxFiles = 100
+    /// 4.0.2 P0-1: unified with `ProjectAnalyzer` via `ProjectIndexPolicy`.
+    static var maxFiles: Int { ProjectIndexPolicy.maxFiles }
 
     struct IndexedFile {
         let path: String
@@ -45,7 +70,7 @@ final class PreviewProjectIndex {
     }
 
     private var files: [String: IndexedFile] = [:]
-    private var fingerprints: [String: String] = [:]
+    private var fingerprints: [String: UInt64] = [:]
 
     /// All Views in the project: name → (defining file, struct).
     private(set) var viewsByName: [String: (file: String, view: PreviewViewStruct)] = [:]
@@ -57,68 +82,110 @@ final class PreviewProjectIndex {
     var indexedCount = 0
     var totalCount = 0
 
-    /// Incremental update.
-    /// - `projectRoot`: the opened project's folder URL.
-    /// - `projectName`: top-level folder name (paths are `"<project>/<rel>"`).
-    /// - `currentPath`/`currentSource`: the file being edited — its editor
-    ///   buffer wins over disk ("当前文件的定义优先").
-    /// - `readFile`: reads any other workspace-relative path from disk.
+    // MARK: - Incremental update (warm path, synchronous)
+
+    /// Incremental update: lists files, then only (re-)parses files whose
+    /// content hash changed since the last pass. Unchanged entries are kept,
+    /// so per-keystroke work is O(changed), not O(project).
+    ///
+    /// - Parameters:
+    ///   - currentPath: workspace path of the file open in the editor.
+    ///   - currentSource: its live in-memory source (wins over disk).
+    ///   - readFile: reads any other workspace file's content.
     func update(projectRoot: URL,
                 projectName: String,
                 currentPath: String?,
-                currentSource: String?,
+                currentSource: String,
                 readFile: (String) -> String?) {
-        let entries = Self.swiftFiles(under: projectRoot, projectName: projectName)
-        totalCount = entries.count
+        let listed = Self.swiftFiles(under: projectRoot, projectName: projectName)
+        totalCount = listed.count
+        // Current file first: it decides what the canvas renders.
+        let ordered = Self.currentFileFirst(listed, currentPath: currentPath)
         var rebuilt = false
-
-        for (path, url) in entries {
-            if path == currentPath, let src = currentSource {
-                let h = Self.hash(src)
-                if files[path]?.hash != h {
-                    index(path: path, source: src)
-                    rebuilt = true
-                }
-                fingerprints[path] = "editor"
-                continue
+        var live = Set<String>()
+        live.reserveCapacity(ordered.count)
+        for (path, _) in ordered {
+            live.insert(path)
+            let content: String?
+            if path == currentPath {
+                content = currentSource
+            } else {
+                content = readFile(path)
             }
-            // Cheap change detection: mtime + size. Contents are only read
-            // when the fingerprint changed.
-            let fp = Self.fingerprint(of: url) ?? UUID().uuidString
-            if fingerprints[path] == fp, files[path] != nil { continue }
-            fingerprints[path] = fp
-            guard let src = readFile(path) else {
+            guard let content else {
+                // Unreadable (deleted mid-pass): drop any stale entry.
                 if files.removeValue(forKey: path) != nil { rebuilt = true }
+                fingerprints.removeValue(forKey: path)
                 continue
             }
-            let h = Self.hash(src)
-            if files[path]?.hash == h { continue }
-            index(path: path, source: src)
+            let hash = Self.hash(content)
+            if fingerprints[path] == hash { continue }  // unchanged — keep cache
+            index(path: path, source: content, hash: hash)
             rebuilt = true
         }
-
         // Drop deleted files.
-        let live = Set(entries.map(\.path))
         for path in files.keys where !live.contains(path) {
             files.removeValue(forKey: path)
+            fingerprints.removeValue(forKey: path)
             rebuilt = true
         }
-
         if rebuilt { rebuildLookup() }
-        indexedCount = totalCount
+        indexedCount = live.count
+    }
+
+    // MARK: - Background rebuild (cold path)
+
+    /// Cold-start indexing on a background thread (4.0.2 P0-1): file contents
+    /// are snapshotted on the caller (because `readFile` touches
+    /// MainActor-isolated store state), then changed files parse in
+    /// cancellable background batches. The current file parses first so the
+    /// canvas never waits on the background pass for the file being edited.
+    /// Results merge back on the caller's actor; `self` is never touched
+    /// off-thread.
+    func rebuildInBackground(projectRoot: URL,
+                             projectName: String,
+                             currentPath: String?,
+                             currentSource: String,
+                             readFile: (String) -> String?) async {
+        let listed = Self.swiftFiles(under: projectRoot, projectName: projectName)
+        totalCount = listed.count
+        let ordered = Self.currentFileFirst(listed, currentPath: currentPath)
+        // Snapshot (path, content) pairs on the caller's actor.
+        var snapshot: [(path: String, content: String, hash: UInt64)] = []
+        snapshot.reserveCapacity(ordered.count)
+        for (path, _) in ordered {
+            let content = (path == currentPath) ? currentSource : readFile(path)
+            guard let content else { continue }
+            let hash = Self.hash(content)
+            if fingerprints[path] == hash { continue }  // already indexed
+            snapshot.append((path, content, hash))
+        }
+        // Parse the rest on a background thread, in cancellable batches.
+        let parsed = await Self.parseInBackground(snapshot)
+        guard !Task.isCancelled else { return }
+        var rebuilt = false
+        for file in parsed {
+            files[file.parsed.path] = file.parsed.entry
+            fingerprints[file.parsed.path] = file.hash
+            rebuilt = true
+        }
+        // Drop deleted files.
+        let live = Set(ordered.map(\.path))
+        for path in files.keys where !live.contains(path) {
+            files.removeValue(forKey: path)
+            fingerprints.removeValue(forKey: path)
+            rebuilt = true
+        }
+        if rebuilt { rebuildLookup() }
+        indexedCount = live.count
     }
 
     /// Parse one file into the index. Files with syntax errors keep their
     /// previous (stale) entry so mid-typing doesn't nuke cross-file lookup.
-    private func index(path: String, source: String) {
-        guard let (file, converter) = PreviewEngine(source: source).parseTree() else { return }
-        var doc = PreviewDocument()
-        PreviewEngine.collect(into: &doc, from: file)
-        let tokens = PreviewEngine.extractTokens(file: file, fileName: path, converter: converter)
-        files[path] = IndexedFile(path: path,
-                                  hash: Self.hash(source),
-                                  views: doc.views,
-                                  tokens: tokens)
+    private func index(path: String, source: String, hash: UInt64) {
+        guard let parsed = Self.parseFile(path: path, content: source) else { return }
+        files[path] = parsed.entry
+        fingerprints[path] = hash
     }
 
     private func rebuildLookup() {
@@ -133,7 +200,72 @@ final class PreviewProjectIndex {
         tokensByName = tokens
     }
 
+    // MARK: - Parsing (thread-safe: fresh parser per call, no shared state)
+
+    /// One file's parse output. Produced on a background thread, merged on
+    /// the caller's actor; the handoff is single-producer → single-consumer
+    /// via `await`, so no shared mutation can occur.
+    private struct ParsedFile: @unchecked Sendable {
+        let path: String
+        let entry: IndexedFile
+    }
+
+    /// Parses one file; nil when the file has syntax errors (caller keeps the
+    /// stale entry).
+    private static func parseFile(path: String, content: String) -> ParsedFile? {
+        let engine = PreviewEngine(source: content)
+        guard let (file, converter) = engine.parseTree() else { return nil }
+        var doc = PreviewDocument()
+        PreviewEngine.collect(into: &doc, from: file)
+        let tokens = PreviewEngine.extractTokens(file: file, fileName: path,
+                                                 converter: converter)
+        return ParsedFile(path: path,
+                          entry: IndexedFile(path: path,
+                                             hash: hash(content),
+                                             views: doc.views,
+                                             tokens: tokens))
+    }
+
+    /// Parses snapshotted files on a background thread, in batches, checking
+    /// cancellation between batches. Never touches the caller's actor or the
+    /// index itself.
+    private static func parseInBackground(
+        _ snapshot: [(path: String, content: String, hash: UInt64)]
+    ) async -> [(parsed: ParsedFile, hash: UInt64)] {
+        guard !snapshot.isEmpty else { return [] }
+        return await Task.detached(priority: .userInitiated) {
+            var out: [(parsed: ParsedFile, hash: UInt64)] = []
+            out.reserveCapacity(snapshot.count)
+            for batchStart in stride(from: 0, to: snapshot.count,
+                                     by: ProjectIndexPolicy.backgroundBatchSize) {
+                if Task.isCancelled { break }
+                let batchEnd = min(batchStart + ProjectIndexPolicy.backgroundBatchSize,
+                                   snapshot.count)
+                for i in batchStart..<batchEnd {
+                    let file = snapshot[i]
+                    if let parsed = parseFile(path: file.path, content: file.content) {
+                        out.append((parsed, file.hash))
+                    }
+                }
+            }
+            return out
+        }.value
+    }
+
     // MARK: - Helpers
+
+    /// Current file first; the rest keep path order (deterministic).
+    private static func currentFileFirst(_ listed: [(path: String, url: URL)],
+                                         currentPath: String?) -> [(path: String, url: URL)] {
+        guard let currentPath,
+              let idx = listed.firstIndex(where: { $0.path == currentPath }) else {
+            return listed
+        }
+        var ordered = listed
+        let current = ordered.remove(at: idx)
+        ordered.insert(current, at: 0)
+        return ordered
+    }
 
     private static func swiftFiles(under root: URL, projectName: String) -> [(path: String, url: URL)] {
         var out: [(path: String, url: URL)] = []
@@ -147,16 +279,9 @@ final class PreviewProjectIndex {
             let prefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
             if rel.hasPrefix(prefix) { rel = String(rel.dropFirst(prefix.count)) }
             out.append((path: projectName + "/" + rel, url: url))
-            if out.count >= maxFiles { break }
+            if out.count >= ProjectIndexPolicy.maxFiles { break }
         }
         return out.sorted { $0.path < $1.path }
-    }
-
-    private static func fingerprint(of url: URL) -> String? {
-        guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
-              let mtime = attrs[.modificationDate] as? Date,
-              let size = attrs[.size] as? NSNumber else { return nil }
-        return "\(mtime.timeIntervalSince1970)-\(size.intValue)"
     }
 
     /// FNV-1a over UTF-8 bytes — cheap content hash for change detection.
