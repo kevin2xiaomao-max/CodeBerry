@@ -17,6 +17,9 @@ enum PreviewResolvedSymbol {
     case typeStub(String)
     case computedView(PreviewComputedView)
     case computedProperty(PreviewComputedProperty)
+    /// 4.0.3 S6: a mock-requirement property read (`@Query`, `@Environment`,
+    /// `@StateObject`, …) — NeedsMock, never an unknown-identifier error.
+    case mockRequirement(PreviewMockRequirement)
     case unknown
 }
 
@@ -48,7 +51,8 @@ struct PreviewResolver {
 
     /// Resolve a bare identifier in `env`, in layer order:
     /// locals → @State keys → computed subviews → ordinary computed
-    /// properties → design tokens → mock store → cross-file types.
+    /// properties → mock-requirement properties → design tokens →
+    /// mock store → cross-file types.
     /// `.unknown` when nothing matches — the caller emits the diagnostic.
     func resolve(_ name: String, env: PreviewEvaluator.Env) -> PreviewResolvedSymbol {
         if let local = env.locals[name] { return .value(local) }
@@ -56,6 +60,12 @@ struct PreviewResolver {
         if let view = activeViews[env.typeName] {
             if let computed = view.computedViews[name] { return .computedView(computed) }
             if let prop = view.computedProperties[name] { return .computedProperty(prop) }
+            // 4.0.3 S6: mock-requirement reads are NeedsMock, never errors.
+            // A filled mock still wins (falls through to the mock layer).
+            if let req = view.mockRequirements.first(where: { $0.propertyName == name }),
+               mockStore?.value(for: name) == nil {
+                return .mockRequirement(req)
+            }
         }
         if let token = projectIndex?.tokensByName[name] { return .value(token.value) }
         if let mock = mockStore?.value(for: name) { return .value(mock) }
@@ -83,5 +93,37 @@ struct PreviewResolver {
     func resolveStaticCall(type typeName: String, function: String) -> PreviewValue? {
         guard let returnType = activeTypes[typeName]?.staticFunctions[function] else { return nil }
         return PreviewEvaluator.previewDefault(forTypeName: returnType)
+    }
+}
+
+// MARK: - 4.0.3 S6: SwiftData substitution policy
+//
+// User decision: SwiftData is NOT unconditionally downgraded. When a safe
+// substitution exists (@Query → [], modelContext → stub), the read becomes
+// NeedsMock. When no substitution can form a meaningful preview, it stays
+// an error.
+
+enum SwiftDataSubstitutionPolicy {
+    /// True when this requirement is SwiftData-backed.
+    static func isSwiftData(_ req: PreviewMockRequirement) -> Bool {
+        req.kind == .query
+            || req.propertyName == "modelContext"
+            || req.typeName.contains("ModelContext")
+            || req.typeName.contains("ModelContainer")
+    }
+
+    /// The safe substitution, or nil when none exists (the caller keeps
+    /// the error — a meaningless preview is worse than an honest one).
+    static func substitute(_ req: PreviewMockRequirement) -> PreviewValue? {
+        switch req.kind {
+        case .query:
+            // @Query → fixture/empty arrays. Always safe.
+            return .array([])
+        case .environment where req.propertyName == "modelContext":
+            // modelContext → silent stub (never a real DB).
+            return .typeStub("ModelContext")
+        default:
+            return nil
+        }
     }
 }

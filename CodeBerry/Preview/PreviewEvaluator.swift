@@ -403,6 +403,32 @@ final class PreviewEvaluator {
             // 4.0.3 S3 (P0-A): ordinary computed properties — `greetingPrefix`,
             // `ownerDisplayName`, `handlingItems`.
             return try invokeComputedProperty(prop, env: env)
+        case .mockRequirement(let req):
+            // 4.0.3 S6 (P0-E): severity regrading. Reading a mock-requirement
+            // property is never an unknown-identifier error.
+            if SwiftDataSubstitutionPolicy.isSwiftData(req) {
+                // User decision: safe substitutions become NeedsMock; when
+                // no substitution can form a meaningful preview it stays
+                // an error.
+                if let sub = SwiftDataSubstitutionPolicy.substitute(req) {
+                    diagnose(.needsMock, .diagSwiftDataSubstituted,
+                             params: [req.propertyName, sub.display],
+                             api: name, node: nil)
+                    return sub
+                }
+                diagnose(.error, .diagSwiftDataNoSubstitution,
+                         params: [req.propertyName], api: name, node: nil)
+                return .void
+            }
+            diagnose(.needsMock, .diagMockNeeded,
+                     params: [req.propertyName], api: name, node: nil)
+            // A known environment type stubs to its declared member types
+            // (e.g. `settings.ownerName` → String default); otherwise the
+            // plain preview default.
+            if activeTypes[req.typeName] != nil {
+                return .typeStub(req.typeName)
+            }
+            return Self.previewDefault(forTypeName: req.typeName)
         case .unknown:
             diagnose(.error, .diagUnknownIdentifier, params: [name], api: name, node: nil)
             return .void

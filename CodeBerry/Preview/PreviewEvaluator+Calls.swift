@@ -61,6 +61,9 @@ extension PreviewEvaluator {
                 switch name {
                 case "uppercased": return .string(string.uppercased())
                 case "lowercased": return .string(string.lowercased())
+                case "trimmingCharacters":
+                    // Pure and preview-irrelevant — keep the string.
+                    return .string(string)
                 default: break
                 }
             }
