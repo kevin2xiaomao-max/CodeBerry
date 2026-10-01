@@ -42,3 +42,24 @@ run as-is, with zero `Unknown identifier` warnings.
 
 `V36CodeBerryPreview.swift` is a second, hand-built fixture covering the
 same engine surface (kept for readability); it is not the gate.
+
+## 3.0 acceptance fixtures (§十七)
+
+`HomeView.swift` + `V36Chrome.swift` + `V32Components.swift` +
+`MockHomeData.swift` form one multi-file project for the 3.0 visual
+workbench. Open all four in the LiteWorkspace (same project) and preview
+`HomeView.swift`:
+
+- computed subviews (`header`, `revenueHero`, `metricPair`, `todoList`)
+- helper funcs (`todoRow(_:done:)`, `tabButton(_:index:)`)
+- cross-file Views (`V36HeaderView`, `V36FloatingTabBar`,
+  `V32MetricCard`, `V32SectionHeader`)
+- design tokens (`HomeTokens.brand` / `cardRadius` / `titleSize`) —
+  Inspector shows token provenance for token-driven colors
+- `@State` (`selectedTab`, `showRevenue`) + `Button`
+- shapes (`.background(RoundedRectangle(...).fill(...))`,
+  `.overlay(... .stroke(...))`), `.ultraThinMaterial`, dark-mode-safe colors
+
+Acceptance walkthrough (§十七): device picker, light/dark, tap-to-inspect
+a `Text`, font-size override staying preview-only, "应用到代码" diff,
+confirmed write, patch export, Chinese UI.
