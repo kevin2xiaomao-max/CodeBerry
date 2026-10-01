@@ -36,6 +36,7 @@ struct V36AcceptanceHarness {
         var warnings: Int = 0
         var needsMocks: Int = 0
         var infos: Int = 0
+        var ignored: Int = 0
         /// Independent unresolved counter: .error diagUnknownIdentifier hits.
         var unresolved: Int = 0
         var keyCounts: [String: Int] = [:]
@@ -97,6 +98,7 @@ struct V36AcceptanceHarness {
                 case .warning: vr.warnings += 1
                 case .needsMock: vr.needsMocks += 1
                 case .info: vr.infos += 1
+                case .ignored: vr.ignored += 1
                 }
             }
             vr.nodeCount = nodes.count

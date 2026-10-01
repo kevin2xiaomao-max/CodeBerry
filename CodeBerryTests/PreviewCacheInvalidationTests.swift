@@ -12,9 +12,9 @@ final class PreviewCacheInvalidationTests: XCTestCase {
 
     private func evaluate(source: String,
                           fileName: String = "Main.swift",
+                          index: PreviewProjectIndex? = nil,
                           cache: inout IncrementalPreview.Cache,
                           runtime: PreviewRuntime = PreviewRuntime(),
-                          index: PreviewProjectIndex? = nil,
                           mockStore: PreviewMockStore? = nil,
                           targetView: String? = nil,
                           fixtureRevision: Int = 0)
