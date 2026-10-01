@@ -135,7 +135,7 @@ final class WorkspaceStore {
             var name = trimmed.filter { $0.isLetter || $0.isNumber }
             if let first = name.first, first.isNumber { name = "App" + name }
             guard !name.isEmpty else {
-                lastError = "Project name must contain letters or digits."
+                lastError = L10nService.shared.t(.errProjectNameInvalid)
                 return
             }
             do {
@@ -146,11 +146,11 @@ final class WorkspaceStore {
                 refresh()
                 openProject(name)
             } catch {
-                lastError = "Couldn't create project: \(error.localizedDescription)"
+                lastError = L10nService.shared.t(.errCreateProject, error.localizedDescription)
             }
         } else {
             guard !trimmed.contains("/") else {
-                lastError = "Project names can't contain “/”."
+                lastError = L10nService.shared.t(.errProjectNameSlash)
                 return
             }
             do {
@@ -159,7 +159,7 @@ final class WorkspaceStore {
                 refresh()
                 openProject(trimmed)
             } catch {
-                lastError = "Couldn't create project: \(error.localizedDescription)"
+                lastError = L10nService.shared.t(.errCreateProject, error.localizedDescription)
             }
         }
     }
@@ -230,7 +230,7 @@ final class WorkspaceStore {
             lastError = nil
             UserDefaults.standard.set(path, forKey: Self.lastOpenFileKey)
         } catch {
-            lastError = "Can't open \(path) — not a UTF-8 text file."
+            lastError = L10nService.shared.t(.errOpenNotUTF8, path)
         }
     }
 
@@ -261,7 +261,7 @@ final class WorkspaceStore {
             try workspace.write(path, content: editorText)
             isDirty = false
         } catch {
-            lastError = "Save failed: \(error.localizedDescription)"
+            lastError = L10nService.shared.t(.errSaveFailed, error.localizedDescription)
         }
     }
 
@@ -293,7 +293,7 @@ final class WorkspaceStore {
             refresh()
             return true
         } catch {
-            lastError = error.localizedDescription
+            lastError = L10nService.shared.t(.errSaveFailed, error.localizedDescription)
             return false
         }
     }
@@ -306,7 +306,7 @@ final class WorkspaceStore {
         if !name.contains(".") { name += ".swift" }
         let path = [folder, name].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "/")
         guard (try? workspace.read(path)) == nil else {
-            lastError = "\(name) already exists."
+            lastError = L10nService.shared.t(.errFileExists, name)
             return
         }
         do {
@@ -314,7 +314,7 @@ final class WorkspaceStore {
             refresh()
             openFile(path)
         } catch {
-            lastError = "Couldn't create \(name): \(error.localizedDescription)"
+            lastError = L10nService.shared.t(.errCreateFile, name, error.localizedDescription)
         }
     }
 
@@ -327,7 +327,7 @@ final class WorkspaceStore {
                                                     withIntermediateDirectories: true)
             refresh()
         } catch {
-            lastError = "Couldn't create folder: \(error.localizedDescription)"
+            lastError = L10nService.shared.t(.errCreateFolder, error.localizedDescription)
         }
     }
 
@@ -340,7 +340,7 @@ final class WorkspaceStore {
             if selectedPath == node.path { selectedPath = nil }
             refresh()
         } catch {
-            lastError = "Couldn't delete \(node.name): \(error.localizedDescription)"
+            lastError = L10nService.shared.t(.errDeleteFailed, node.name, error.localizedDescription)
         }
     }
 
@@ -364,7 +364,7 @@ final class WorkspaceStore {
             if selectedPath == node.path { selectedPath = newPath }
             refresh()
         } catch {
-            lastError = "Couldn't rename: \(error.localizedDescription)"
+            lastError = L10nService.shared.t(.errRenameFailed, error.localizedDescription)
         }
     }
 

@@ -2,11 +2,5 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>CodeBerry connects to your Mac running AgentOS over the local network to build and run your projects.</string>
-	<key>NSBonjourServices</key>
-	<array>
-		<string>_codeberry._tcp</string>
-	</array>
 </dict>
 </plist>

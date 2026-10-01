@@ -49,6 +49,18 @@ enum L10nKey: String, CaseIterable {
     case errNoBody             // %@ 没有可预览的 body
     case errRecursionDeep      // 视图嵌套过深（可能是递归视图）
 
+    // MARK: Workspace errors (§一-6, release cleanup)
+    case errProjectNameInvalid  // 项目名称必须包含字母或数字。
+    case errCreateProject       // 无法创建项目：%@
+    case errProjectNameSlash    // 项目名称不能包含"/"。
+    case errOpenNotUTF8         // 无法打开 %@ — 不是 UTF-8 文本文件。
+    case errSaveFailed          // 保存失败：%@
+    case errFileExists          // %@ 已存在。
+    case errCreateFile          // 无法创建 %@：%@
+    case errCreateFolder        // 无法创建文件夹：%@
+    case errDeleteFailed        // 无法删除 %@：%@
+    case errRenameFailed        // 无法重命名：%@
+
     // MARK: App chrome
     case appName
     case done
@@ -272,6 +284,17 @@ final class L10nService: @unchecked Sendable {
         .errNoPreviewableView: ("无法预览：请添加遵循 View 的 struct 或 #Preview", "Nothing to preview — add a struct conforming to View or a #Preview block."),
         .errNoBody: ("%@ 没有可预览的 body", "%@ has no body to preview."),
         .errRecursionDeep: ("视图嵌套过深（可能是递归视图）", "View nesting too deep (recursive view?)."),
+        // Workspace errors
+        .errProjectNameInvalid: ("项目名称必须包含字母或数字。", "Project name must contain letters or digits."),
+        .errCreateProject: ("无法创建项目：%@", "Couldn't create project: %@"),
+        .errProjectNameSlash: ("项目名称不能包含\"/\"。", "Project names can't contain \"/\"."),
+        .errOpenNotUTF8: ("无法打开 %@ — 不是 UTF-8 文本文件。", "Can't open %@ — not a UTF-8 text file."),
+        .errSaveFailed: ("保存失败：%@", "Save failed: %@"),
+        .errFileExists: ("%@ 已存在。", "%@ already exists."),
+        .errCreateFile: ("无法创建 %@：%@", "Couldn't create %@: %@"),
+        .errCreateFolder: ("无法创建文件夹：%@", "Couldn't create folder: %@"),
+        .errDeleteFailed: ("无法删除 %@：%@", "Couldn't delete %@: %@"),
+        .errRenameFailed: ("无法重命名：%@", "Couldn't rename: %@"),
         // App chrome
         .appName: ("CodeBerry Lite", "CodeBerry Lite"),
         .done: ("完成", "Done"),
