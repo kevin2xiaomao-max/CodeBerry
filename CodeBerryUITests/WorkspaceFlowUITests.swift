@@ -8,6 +8,12 @@ import XCTest
 /// Tab indices: 0 Files · 1 Code · 2 Preview · 3 Changes.
 /// Labels are matched bilingually ("Projects"/"项目" etc.) so the test
 /// does not depend on the simulator locale.
+///
+/// @MainActor: XCUIElementQuery.matching(_:) is MainActor-isolated in the
+/// Swift 6 XCTest overlay and NSPredicate is not Sendable, so the whole
+/// class lives on the main actor (all XCUITest interaction runs on the
+/// main thread anyway).
+@MainActor
 final class WorkspaceFlowUITests: XCTestCase {
 
     private var app: XCUIApplication!
