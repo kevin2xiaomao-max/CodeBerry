@@ -173,6 +173,91 @@ extension PreviewEvaluator {
             if case .string(let s) = value { return .number(Double(s) ?? 0) }
             return .number(value.doubleValue ?? 0)
 
+        // MARK: - 4.0.2 P0-5: approximated SwiftUI containers.
+        // Approximate rather than unsupported wherever a visual reading
+        // is possible — these used to render as [?].
+
+        case "TabView":
+            // No tab switching in preview — render all pages.
+            return .view(PreviewViewNode(kind: .group(try builderChildren(call, env: env))))
+
+        case "ToolbarItem", "WindowGroup":
+            // Toolbar chrome is dropped (cosmetic); WindowGroup is an App
+            // scene container — render the content inline in both cases.
+            return .view(PreviewViewNode(kind: .group(try builderChildren(call, env: env))))
+
+        case "ContentUnavailableView":
+            var cuChildren: [PreviewViewNode] = []
+            if let titleExpr = args.first(where: { $0.label == nil })?.expr,
+               let title = try? eval(titleExpr, env: env), !title.display.isEmpty {
+                cuChildren.append(PreviewViewNode(kind: .text(title.display)))
+            }
+            cuChildren += try builderChildren(call, env: env)
+            if cuChildren.isEmpty {
+                cuChildren.append(PreviewViewNode(kind: .text("ContentUnavailableView")))
+            }
+            return .view(PreviewViewNode(kind: .group(cuChildren)))
+
+        case "GroupBox":
+            var gbChildren: [PreviewViewNode] = []
+            if let titleExpr = args.first(where: { $0.label == nil })?.expr,
+               let title = try? eval(titleExpr, env: env), !title.display.isEmpty {
+                gbChildren.append(PreviewViewNode(kind: .text(title.display)))
+            }
+            if let labelExpr = args.first(where: { $0.label == "label" })?.expr {
+                gbChildren += try closureChildren(labelExpr, env: env)
+            }
+            gbChildren += try builderChildren(call, env: env)
+            return .view(PreviewViewNode(kind: .group(gbChildren)))
+
+        case "NavigationLink":
+            // The destination is navigation, not preview content —
+            // render the label only.
+            var linkChildren: [PreviewViewNode] = []
+            if let first = args.first(where: { $0.label == nil }) {
+                if let closure = first.expr.as(ClosureExprSyntax.self) {
+                    linkChildren += try viewBuilderChildren(closure.statements, env: env)
+                } else if let label = try? eval(first.expr, env: env),
+                          !label.display.isEmpty {
+                    linkChildren.append(PreviewViewNode(kind: .text(label.display)))
+                }
+            }
+            linkChildren += try builderChildren(call, env: env)
+            return .view(PreviewViewNode(kind: .group(linkChildren)))
+
+        case "LazyVGrid":
+            return .view(try stackNode(.vertical, call: call, args: args, env: env))
+
+        case "LazyHGrid":
+            return .view(try stackNode(.horizontal, call: call, args: args, env: env))
+
+        case "GridItem":
+            // Layout metadata, not visual — renders nothing, no warning.
+            return .void
+
+        case "AnyView":
+            if let first = args.first,
+               case .view(let node) = try eval(first.expr, env: env) {
+                return .view(node)
+            }
+            return .void
+
+        case "EmptyView":
+            return .void
+
+        case "GeometryReader", "ScrollViewReader":
+            return .view(PreviewViewNode(kind: .group(
+                try readerChildren(call: call, env: env))))
+
+        case "Form":
+            return .view(PreviewViewNode(kind: .list(try builderChildren(call, env: env))))
+
+        case "Link":
+            let linkTitle = try args.first(where: { $0.label == nil })
+                .map { try eval($0.expr, env: env) }?.display ?? ""
+            return .view(PreviewViewNode(kind: .text(
+                linkTitle.isEmpty ? "Link" : linkTitle)))
+
         default:
             // 4.0.2 P0-2: cross-file component resolution order —
             //   1. current file (`doc`, wins via `activeViews` merge),
@@ -332,6 +417,26 @@ extension PreviewEvaluator {
         return try viewBuilderChildren(trailing.statements, env: env)
     }
 
+    /// 4.0.2 P0-5: evaluates a labeled closure argument's body
+    /// (`label:` / `destination:` style, e.g. GroupBox's label).
+    private func closureChildren(_ expr: ExprSyntax, env: Env) throws -> [PreviewViewNode] {
+        guard let closure = expr.as(ClosureExprSyntax.self) else { return [] }
+        return try viewBuilderChildren(closure.statements, env: env)
+    }
+
+    /// 4.0.2 P0-5: `GeometryReader { geo in ... }` /
+    /// `ScrollViewReader { proxy in ... }` — binds the closure parameter to
+    /// `.void` so references to it don't raise unknown-identifier errors,
+    /// then renders the body (geometry/proxy values are approximate).
+    private func readerChildren(call: FunctionCallExprSyntax, env: Env) throws -> [PreviewViewNode] {
+        guard let trailing = call.trailingClosure else { return [] }
+        var childEnv = env
+        if let param = closureParameterName(trailing) {
+            childEnv.locals[param] = .void
+        }
+        return try viewBuilderChildren(trailing.statements, env: childEnv)
+    }
+
     // MARK: Modifiers
 
     /// Modifiers that only affect chrome/behavior the canvas can't show —
@@ -351,7 +456,8 @@ extension PreviewEvaluator {
                                args: [(label: String?, expr: ExprSyntax)],
                                to node: inout PreviewViewNode, env: Env) throws {
         switch name {
-        case "padding":
+        // 4.0.2 P0-5: safeAreaPadding behaves like padding on the canvas.
+        case "padding", "safeAreaPadding":
             var edges: Edge.Set = .all
             var amount: Double?
             for arg in args {

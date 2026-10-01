@@ -87,6 +87,7 @@ struct PreviewReadiness: Sendable {
         let unknown = used.filter {
             !ComponentRegistry.isKnownView($0) && !knownViews.contains($0)
                 && $0.first?.isUppercase == true
+                && !Self.nonViewCallNames.contains($0)
         }
         if !unknown.isEmpty {
             let s = Status.missingComponentSupport(components: Array(Set(unknown)).sorted())
@@ -122,6 +123,29 @@ struct PreviewReadiness: Sendable {
         }
         return false
     }
+
+    // MARK: - 4.0.2 P0-4: never components
+    //
+    /// Call names that are never SwiftUI view components: Swift standard
+    /// library, Foundation, and SwiftUI non-view value types that appear as
+    /// calls in view code. The old filter (uppercase first letter only)
+    /// misreported them as "missing custom component support", which pushed
+    /// perfectly previewable pages into 🟡.
+    private static let nonViewCallNames: Set<String> = [
+        // Swift standard library
+        "Array", "Dictionary", "Set", "String", "Substring", "Character",
+        "Int", "Double", "Float", "CGFloat", "Bool", "Optional", "Result",
+        // Foundation
+        "Date", "DateComponents", "DateInterval", "Locale", "Calendar",
+        "TimeZone", "DateFormatter", "NumberFormatter", "URL", "URLComponents",
+        "UUID", "Data", "JSONDecoder", "JSONEncoder", "UserDefaults",
+        "NotificationCenter", "Timer", "Decimal", "Measurement", "IndexPath",
+        "NSRange", "NSString", "NSArray", "NSDictionary", "NSNumber",
+        "NSStringFromString", "NSLocalizedString",
+        // SwiftUI / Combine non-view value types commonly called in view code
+        "Binding", "StrokeStyle", "Animation", "Transaction", "ColorScheme",
+        "EditMode", "AnyTransition",
+    ]
 
     private static func firstErrorLine(in tree: SourceFileSyntax) -> String? {
         // Best-effort: return the first ~80 chars around the first token with

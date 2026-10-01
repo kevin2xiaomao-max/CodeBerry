@@ -144,6 +144,24 @@ enum ViewRegistry {
               workaround: "用 Text + 选项列表近似"),
             e("Gauge", level: .unsupported, diag: "暂不支持 Gauge",
               workaround: "用 ProgressView 近似"),
+            // 4.0.2 P0-5: built-ins the old engine rendered as [?].
+            // Approximate rather than unsupported wherever a visual
+            // reading is possible.
+            e("TabView", level: .approximate, diag: "按 Group 近似，不模拟 Tab 切换"),
+            e("ToolbarItem", level: .approximate, diag: "工具栏内容，内联渲染"),
+            e("WindowGroup", level: .approximate, diag: "App Scene 容器，直接渲染内容"),
+            e("ContentUnavailableView", level: .approximate, diag: "按 label 内容近似"),
+            e("GroupBox", level: .approximate, diag: "按 Group 近似，标题为文本"),
+            e("NavigationLink", level: .approximate, diag: "只渲染 label，不导航"),
+            e("LazyVGrid", level: .approximate, diag: "按 VStack 近似渲染（不做懒加载）"),
+            e("LazyHGrid", level: .approximate, diag: "按 HStack 近似渲染（不做懒加载）"),
+            e("GridItem", level: .approximate, diag: "布局元数据，不渲染"),
+            e("AnyView", diag: "透传内部视图"),
+            e("EmptyView", diag: "空视图，不渲染"),
+            e("GeometryReader", level: .approximate, diag: "忽略几何尺寸，直接渲染内容"),
+            e("ScrollViewReader", level: .approximate, diag: "忽略 proxy，直接渲染内容"),
+            e("Form", level: .approximate, diag: "按 List 近似"),
+            e("Link", level: .approximate, diag: "按文本近似，不打开链接"),
         ])
     }()
 }
