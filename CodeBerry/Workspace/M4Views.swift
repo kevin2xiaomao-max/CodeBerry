@@ -177,6 +177,10 @@ struct ChangesTabView: View {
                 }
             }
             .navigationTitle(l10n.t(.changesTab))
+            // P0-1: inline title like the other three tabs — a large title is
+            // exposed to XCUITest as static text and the toolbarTitleMenu does
+            // not open from it; inline exposes the title as a tappable button.
+            .navigationBarTitleDisplayMode(.inline)
             // P0-1: the unified workspace navigation menu lives inside the
             // tab's own NavigationStack (toolbar modifiers on the stack
             // itself would be ignored).
