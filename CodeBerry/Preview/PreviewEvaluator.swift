@@ -534,13 +534,15 @@ final class PreviewEvaluator {
                     let value = try returnStmt.expression.map { try eval($0, env: env) } ?? .void
                     return (value, true)
                 }
-                if let ifStmt = stmt.as(IfStmtSyntax.self) {
-                    let (value, didReturn) = try evalGetterIf(ifStmt, env: &env)
+            case .expr(let expr):
+                if let ifExpr = expr.as(IfExprSyntax.self) {
+                    // `if` in a getter body parses as an if-expression.
+                    let (value, didReturn) = try evalGetterIf(ifExpr, env: &env)
                     if didReturn { return (value, true) }
                     last = value
+                } else {
+                    last = try eval(expr, env: env)
                 }
-            case .expr(let expr):
-                last = try eval(expr, env: env)
             @unknown default:
                 break
             }
@@ -548,12 +550,12 @@ final class PreviewEvaluator {
         return (last, false)
     }
 
-    /// Evaluates an `if` statement inside a getter: conditions support
+    /// Evaluates an `if` expression inside a getter: conditions support
     /// plain expressions and `if let` bindings.
-    private func evalGetterIf(_ ifStmt: IfStmtSyntax,
+    private func evalGetterIf(_ ifExpr: IfExprSyntax,
                               env: inout Env) throws -> (PreviewValue, Bool) {
         var condTrue = true
-        for element in ifStmt.conditions {
+        for element in ifExpr.conditions {
             switch element.condition {
             case .expression(let expr):
                 if !((try eval(expr, env: env)).boolValue ?? false) { condTrue = false }
@@ -576,10 +578,10 @@ final class PreviewEvaluator {
             if !condTrue { break }
         }
         if condTrue {
-            return try evalGetterStatements(ifStmt.body.statements, env: &env)
+            return try evalGetterStatements(ifExpr.body.statements, env: &env)
         }
-        switch ifStmt.elseBody {
-        case .ifStatement(let nested):
+        switch ifExpr.elseBody {
+        case .ifExpr(let nested):
             return try evalGetterIf(nested, env: &env)
         case .codeBlock(let block):
             return try evalGetterStatements(block.statements, env: &env)

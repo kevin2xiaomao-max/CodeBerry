@@ -70,6 +70,8 @@ struct PreviewComputedProperty {
 private final class SideEffectScanner: SyntaxVisitor {
     var found = false
 
+    init() { super.init(viewMode: .sourceAccurate) }
+
     override func visit(_ node: AssignmentExprSyntax) -> SyntaxVisitorContinueKind {
         found = true
         return .visitChildren

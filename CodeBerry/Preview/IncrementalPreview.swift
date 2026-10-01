@@ -181,7 +181,7 @@ enum IncrementalPreview {
         hasher.combine(fileName)
         hasher.combine(viewName)
         hasher.combine(bodyText)
-        return (key: "\(fileName)#\(viewName)", bodyHash: hasher.finalize())
+        return (key: "\(fileName)#\(viewName)", bodyHash: hasher.finalize(), viewName: viewName)
     }
 
     static func diagnosticsHash(of diagnostics: [PreviewDiagnostic]) -> Int {
