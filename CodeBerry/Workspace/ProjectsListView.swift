@@ -11,16 +11,17 @@ struct ProjectsListView: View {
     @State private var renameTarget: ProjectInfo?
     @State private var renameText = ""
     @State private var deleteTarget: ProjectInfo?
+    @Bindable private var l10n = L10nService.shared
 
     var body: some View {
         Group {
             if store.projects.isEmpty {
                 ContentUnavailableView {
-                    Label("No Projects", systemImage: "folder.badge.plus")
+                    Label(l10n.t(.noProjects), systemImage: "folder.badge.plus")
                 } description: {
-                    Text("Create your first project to start coding.")
+                    Text(l10n.t(.noProjectsDesc))
                 } actions: {
-                    Button("New Project") {
+                    Button(l10n.t(.newProject)) {
                         newProjectName = ""
                         showNewProject = true
                     }
@@ -38,7 +39,7 @@ struct ProjectsListView: View {
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Menu {
-                    Button("Settings", systemImage: "gearshape") {
+                    Button(l10n.t(.settings), systemImage: "gearshape") {
                         onShowSettings()
                     }
                 } label: {
@@ -54,42 +55,42 @@ struct ProjectsListView: View {
                 }
             }
         }
-        .alert("New Project", isPresented: $showNewProject) {
-            TextField("Name, e.g. PomodoroTimer", text: $newProjectName)
+        .alert(l10n.t(.newProject), isPresented: $showNewProject) {
+            TextField(l10n.t(.projectNamePlaceholder), text: $newProjectName)
                 .textInputAutocapitalization(.never)
-            Button("Create App Project") {
+            Button(l10n.t(.createAppProject)) {
                 let name = newProjectName
                 Task { await store.createProject(named: name, scaffold: true) }
             }
-            Button("Create Empty Project") {
+            Button(l10n.t(.createEmptyProject)) {
                 let name = newProjectName
                 Task { await store.createProject(named: name, scaffold: false) }
             }
-            Button("Cancel", role: .cancel) {}
+            Button(l10n.t(.cancel), role: .cancel) {}
         } message: {
-            Text("App projects include a starter SwiftUI file; empty projects are just a folder.")
+            Text(l10n.t(.newProjectMessage))
         }
-        .alert("Rename Project", isPresented: Binding(get: { renameTarget != nil },
+        .alert(l10n.t(.renameProject), isPresented: Binding(get: { renameTarget != nil },
                                                       set: { if !$0 { renameTarget = nil } })) {
-            TextField("New name", text: $renameText)
+            TextField(l10n.t(.newNamePlaceholder), text: $renameText)
                 .textInputAutocapitalization(.never)
-            Button("Rename") {
+            Button(l10n.t(.rename)) {
                 if let target = renameTarget { store.rename(node(for: target), to: renameText) }
                 renameTarget = nil
             }
-            Button("Cancel", role: .cancel) { renameTarget = nil }
+            Button(l10n.t(.cancel), role: .cancel) { renameTarget = nil }
         }
-        .confirmationDialog("Delete \(deleteTarget?.name ?? "")?",
+        .confirmationDialog(l10n.t(.delete) + " \(deleteTarget?.name ?? "")?",
                             isPresented: Binding(get: { deleteTarget != nil },
                                                  set: { if !$0 { deleteTarget = nil } }),
                             titleVisibility: .visible) {
-            Button("Delete", role: .destructive) {
+            Button(l10n.t(.delete), role: .destructive) {
                 if let target = deleteTarget { store.delete(node(for: target)) }
                 deleteTarget = nil
             }
-            Button("Cancel", role: .cancel) { deleteTarget = nil }
+            Button(l10n.t(.cancel), role: .cancel) { deleteTarget = nil }
         } message: {
-            Text("This deletes the whole project folder and can't be undone.")
+            Text(l10n.t(.deleteProjectMessage))
         }
     }
 
@@ -129,23 +130,23 @@ struct ProjectsListView: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
-            Button("Rename", systemImage: "pencil") {
+            Button(l10n.t(.rename), systemImage: "pencil") {
                 renameTarget = project
                 renameText = project.name
             }
-            Button("Delete", systemImage: "trash", role: .destructive) {
+            Button(l10n.t(.delete), systemImage: "trash", role: .destructive) {
                 deleteTarget = project
             }
         }
         .swipeActions(edge: .trailing) {
-            Button("Delete", systemImage: "trash", role: .destructive) {
+            Button(l10n.t(.delete), systemImage: "trash", role: .destructive) {
                 deleteTarget = project
             }
         }
     }
 
     private func caption(for project: ProjectInfo) -> String {
-        var parts = [project.isAppProject ? "iOS App" : "Folder"]
+        var parts = [project.isAppProject ? l10n.t(.iosAppKind) : l10n.t(.folderKind)]
         if let modified = project.modified {
             parts.append(modified.formatted(date: .abbreviated, time: .omitted))
         }

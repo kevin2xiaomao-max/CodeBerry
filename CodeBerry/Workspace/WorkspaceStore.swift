@@ -265,6 +265,39 @@ final class WorkspaceStore {
         }
     }
 
+    // MARK: - Preview support (§二 multi-file index, §三 inspector writes)
+
+    /// The opened project's folder URL, for the preview index.
+    func previewProjectRoot() -> URL? {
+        guard let name = currentProject else { return nil }
+        return try? workspace.resolve(name)
+    }
+
+    /// File content for the preview index: the editor buffer wins for the
+    /// open file ("当前文件的定义优先"), disk for everything else.
+    func previewFileContent(_ path: String) -> String? {
+        if path == openFilePath { return editorText }
+        return try? workspace.read(path)
+    }
+
+    /// Write a file from the Inspector (§三: only after the user confirms the
+    /// diff; §十三: a failed write keeps the original file).
+    @discardableResult
+    func writePreviewFile(_ path: String, content: String) -> Bool {
+        do {
+            try workspace.write(path, content: content)
+            if path == openFilePath {
+                editorText = content
+                isDirty = false
+            }
+            refresh()
+            return true
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
     // MARK: - Create / delete / rename
 
     func createFile(named rawName: String, in folder: String?) {

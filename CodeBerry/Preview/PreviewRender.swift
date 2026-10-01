@@ -56,21 +56,52 @@ struct PreviewViewNode {
 
     var kind: Kind
     var modifiers: [PreviewModifierOp] = []
+    /// §三 Source location of the expression that produced this node.
+    var source: PreviewSourceInfo?
 }
 
 // MARK: - Renderer
+
+/// Render context for Inspector tap-to-select (§三). Nil in normal rendering.
+struct PreviewRenderContext {
+    var inspector: PreviewInspectorState?
+    var selectMode: Bool = false
+    var onSelect: ((String) -> Void)?
+}
 
 /// Maps an interpreted node onto real SwiftUI views.
 struct PreviewNodeView: View {
     let node: PreviewViewNode
     let runtime: PreviewRuntime
+    var context: PreviewRenderContext?
 
+    @ViewBuilder
     var body: some View {
-        Self.applying(node.modifiers, to: AnyView(base), runtime: runtime)
+        let displayNode = context?.inspector?.applied(to: node) ?? node
+        let content = Self.applying(displayNode.modifiers,
+                                    to: AnyView(base(for: displayNode)),
+                                    runtime: runtime)
+        if let context, context.selectMode {
+            // In select mode taps select the element instead of activating it.
+            ZStack {
+                content.allowsHitTesting(false)
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if let id = node.source?.nodeID { context.onSelect?(id) }
+                    }
+                if context.inspector?.selectedID == node.source?.nodeID {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.accentColor, lineWidth: 2)
+                }
+            }
+        } else {
+            content
+        }
     }
 
     @ViewBuilder
-    private var base: some View {
+    private func base(for node: PreviewViewNode) -> some View {
         switch node.kind {
         case .text(let string):
             Text(string)
@@ -87,7 +118,7 @@ struct PreviewNodeView: View {
         case .button(let label, let action):
             Button(action: { action?() }) {
                 if label.count == 1 {
-                    PreviewNodeView(node: label[0], runtime: runtime)
+                    PreviewNodeView(node: label[0], runtime: runtime, context: context)
                 } else {
                     HStack(spacing: 6) { render(label) }
                 }
@@ -124,7 +155,7 @@ struct PreviewNodeView: View {
     @ViewBuilder
     private func render(_ children: [PreviewViewNode]) -> some View {
         ForEach(children.indices, id: \.self) { index in
-            PreviewNodeView(node: children[index], runtime: runtime)
+            PreviewNodeView(node: children[index], runtime: runtime, context: context)
         }
     }
 
@@ -146,7 +177,7 @@ struct PreviewNodeView: View {
     private func pseudoList(_ children: [PreviewViewNode]) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(children.indices, id: \.self) { index in
-                PreviewNodeView(node: children[index], runtime: runtime)
+                PreviewNodeView(node: children[index], runtime: runtime, context: context)
                     .padding(.vertical, 11)
                     .padding(.horizontal, 16)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -210,7 +241,7 @@ struct PreviewNodeView: View {
             case .overlay(let children):
                 v = AnyView(v.overlay {
                     ForEach(children.indices, id: \.self) { index in
-                        PreviewNodeView(node: children[index], runtime: runtime)
+                        PreviewNodeView(node: children[index], runtime: runtime, context: context)
                     }
                 })
             case .tint(let color):

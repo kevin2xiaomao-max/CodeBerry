@@ -15,13 +15,14 @@ struct FileNavigatorView: View {
     @State private var expandedFolders: Set<String> = []
     /// Folder targeted by a context-menu "New File/Folder"; nil = use selection.
     @State private var newItemFolder: String?
+    @Bindable private var l10n = L10nService.shared
 
     var body: some View {
         List(selection: $store.selectedPath) {
             if store.tree.isEmpty {
-                ContentUnavailableView("Empty Workspace",
+                ContentUnavailableView(l10n.t(.files),
                                        systemImage: "folder",
-                                       description: Text("Create a Swift file with + or ask the agent to build something."))
+                                       description: Text(l10n.t(.navigatorEmptyDesc)))
             } else {
                 outline(store.tree)
             }
@@ -37,18 +38,18 @@ struct FileNavigatorView: View {
                     HStack(spacing: 3) {
                         Image(systemName: "chevron.left")
                             .font(.body.weight(.semibold))
-                        Text("Projects")
+                        Text(l10n.t(.backToProjects))
                     }
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    Button("New Swift File", systemImage: "doc.badge.plus") {
+                    Button(l10n.t(.newFile), systemImage: "doc.badge.plus") {
                         newItemFolder = nil
                         newFileName = ""
                         showNewFile = true
                     }
-                    Button("New Folder", systemImage: "folder.badge.plus") {
+                    Button(l10n.t(.newFolder), systemImage: "folder.badge.plus") {
                         newItemFolder = nil
                         newFolderName = ""
                         showNewFolder = true
@@ -58,49 +59,49 @@ struct FileNavigatorView: View {
                 }
             }
         }
-        .alert("New Swift File", isPresented: $showNewFile) {
-            TextField("Name, e.g. TimerView.swift", text: $newFileName)
+        .alert(l10n.t(.newFile), isPresented: $showNewFile) {
+            TextField("TimerView.swift", text: $newFileName)
                 .textInputAutocapitalization(.never)
-            Button("Create") {
+            Button(l10n.t(.create)) {
                 if let folder = destinationFolder { expandedFolders.insert(folder) }
                 store.createFile(named: newFileName, in: destinationFolder)
                 newItemFolder = nil
             }
-            Button("Cancel", role: .cancel) { newItemFolder = nil }
+            Button(l10n.t(.cancel), role: .cancel) { newItemFolder = nil }
         } message: {
-            Text("Created in \(destinationFolder?.isEmpty == false ? destinationFolder! : "the workspace root").")
+            Text(l10n.t(.newFolderMessage, destinationFolder?.isEmpty == false ? destinationFolder! : l10n.t(.workspaceRoot)))
         }
-        .alert("New Folder", isPresented: $showNewFolder) {
-            TextField("Folder name", text: $newFolderName)
+        .alert(l10n.t(.newFolder), isPresented: $showNewFolder) {
+            TextField(l10n.t(.newNamePlaceholder), text: $newFolderName)
                 .textInputAutocapitalization(.never)
-            Button("Create") {
+            Button(l10n.t(.create)) {
                 if let folder = destinationFolder { expandedFolders.insert(folder) }
                 store.createFolder(named: newFolderName, in: destinationFolder)
                 newItemFolder = nil
             }
-            Button("Cancel", role: .cancel) { newItemFolder = nil }
+            Button(l10n.t(.cancel), role: .cancel) { newItemFolder = nil }
         }
-        .alert("Rename", isPresented: Binding(get: { renameTarget != nil },
+        .alert(l10n.t(.renameFile), isPresented: Binding(get: { renameTarget != nil },
                                               set: { if !$0 { renameTarget = nil } })) {
-            TextField("New name", text: $renameText)
+            TextField(l10n.t(.newNamePlaceholder), text: $renameText)
                 .textInputAutocapitalization(.never)
-            Button("Rename") {
+            Button(l10n.t(.rename)) {
                 if let target = renameTarget { store.rename(target, to: renameText) }
                 renameTarget = nil
             }
-            Button("Cancel", role: .cancel) { renameTarget = nil }
+            Button(l10n.t(.cancel), role: .cancel) { renameTarget = nil }
         }
-        .confirmationDialog("Delete \(deleteTarget?.name ?? "")?",
+        .confirmationDialog(l10n.t(.delete) + " \(deleteTarget?.name ?? "")?",
                             isPresented: Binding(get: { deleteTarget != nil },
                                                  set: { if !$0 { deleteTarget = nil } }),
                             titleVisibility: .visible) {
-            Button("Delete", role: .destructive) {
+            Button(l10n.t(.delete), role: .destructive) {
                 if let target = deleteTarget { store.delete(target) }
                 deleteTarget = nil
             }
-            Button("Cancel", role: .cancel) { deleteTarget = nil }
+            Button(l10n.t(.cancel), role: .cancel) { deleteTarget = nil }
         } message: {
-            Text("This can't be undone.")
+            Text(l10n.t(.deleteFileMessage))
         }
     }
 
@@ -152,28 +153,28 @@ struct FileNavigatorView: View {
         }
         .contextMenu {
             if node.isDirectory && !node.isXcodeProject {
-                Button("New Swift File", systemImage: "doc.badge.plus") {
+                Button(l10n.t(.newFile), systemImage: "doc.badge.plus") {
                     newItemFolder = node.path
                     newFileName = ""
                     showNewFile = true
                 }
-                Button("New Folder", systemImage: "folder.badge.plus") {
+                Button(l10n.t(.newFolder), systemImage: "folder.badge.plus") {
                     newItemFolder = node.path
                     newFolderName = ""
                     showNewFolder = true
                 }
                 Divider()
             }
-            Button("Rename", systemImage: "pencil") {
+            Button(l10n.t(.renameFile), systemImage: "pencil") {
                 renameTarget = node
                 renameText = node.name
             }
-            Button("Delete", systemImage: "trash", role: .destructive) {
+            Button(l10n.t(.delete), systemImage: "trash", role: .destructive) {
                 deleteTarget = node
             }
         }
         .swipeActions(edge: .trailing) {
-            Button("Delete", systemImage: "trash", role: .destructive) {
+            Button(l10n.t(.delete), systemImage: "trash", role: .destructive) {
                 deleteTarget = node
             }
         }

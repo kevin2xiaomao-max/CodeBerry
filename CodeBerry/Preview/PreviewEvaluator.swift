@@ -83,8 +83,40 @@ final class PreviewEvaluator {
 
     let doc: PreviewDocument
     let runtime: PreviewRuntime
-    private(set) var warnings: [String] = []
-    private var warningSet: Set<String> = []
+    /// §二 Cross-file index. When set, View/function/computed-view and token
+    /// lookups span the whole project; the current document always wins.
+    var projectIndex: PreviewProjectIndex?
+
+    /// All Views visible to this evaluation: project index first, current
+    /// document overriding ("当前文件的定义优先").
+    var activeViews: [String: PreviewViewStruct] {
+        guard let index = projectIndex else { return doc.views }
+        var merged: [String: PreviewViewStruct] = [:]
+        for (name, entry) in index.viewsByName { merged[name] = entry.view }
+        for (name, view) in doc.views { merged[name] = view }
+        return merged
+    }
+    var warnings: [String] {
+        diagnostics.filter { $0.severity == .warning }.map(\.message)
+    }
+    /// Structured diagnostics (§十一) — each has severity, message, file, line, API.
+    private(set) var diagnostics: [PreviewDiagnostic] = []
+    private var diagnosticSet: Set<String> = []
+    /// Source location context for diagnostics: set by the canvas/index per file.
+    var fileName: String = ""
+    var converter: SourceLocationConverter?
+    /// §七 Mock data store, set by the canvas.
+    var mockStore: PreviewMockStore?
+
+    /// §三 Source info for a syntax node (nil when no converter is set).
+    func sourceInfo(for node: some SyntaxProtocol) -> PreviewSourceInfo? {
+        guard let converter else { return nil }
+        let pos = node.positionAfterSkippingLeadingTrivia
+        return PreviewSourceInfo(file: fileName,
+                                 line: converter.location(for: pos).line,
+                                 startOffset: pos.utf8Offset,
+                                 endOffset: node.endPosition.utf8Offset)
+    }
     /// Recursion guard shared with PreviewEvaluator+Calls (computed views,
     /// helper functions, struct instantiation).
     var depth = 0
@@ -98,16 +130,37 @@ final class PreviewEvaluator {
         if let previewBody = doc.previewBody {
             return try viewBuilderChildren(previewBody, env: Env())
         }
-        guard let firstName = doc.viewOrder.first, let first = doc.views[firstName] else {
-            throw PreviewError(message: "No SwiftUI view found in this file.")
+        guard let firstName = doc.viewOrder.first, let first = activeViews[firstName] else {
+            throw PreviewError(.errNoPreviewableView)
         }
         return [try instantiateStruct(first, args: [], callerEnv: Env())]
     }
 
-    func warn(_ message: String) {
-        guard !warningSet.contains(message) else { return }
-        warningSet.insert(message)
-        warnings.append(message)
+    /// Structured diagnostic (§十一): severity + localized message + file + line + API.
+    func diagnose(_ severity: PreviewDiagnosticSeverity,
+                  _ key: L10nKey,
+                  params: [String] = [],
+                  api: String? = nil,
+                  node: (any SyntaxProtocol)? = nil,
+                  file: String? = nil) {
+        let line: Int?
+        if let node, let converter {
+            line = converter.location(for: node.positionAfterSkippingLeadingTrivia).line
+        } else {
+            line = nil
+        }
+        let fileName = file ?? self.fileName
+        // De-duplicate identical diagnostics so one repeated pattern doesn't
+        // flood the panel.
+        let dedupeKey = "\(severity)|\(key.rawValue)|\(params.joined(separator: "|"))|\(fileName)|\(line ?? -1)"
+        guard !diagnosticSet.contains(dedupeKey) else { return }
+        diagnosticSet.insert(dedupeKey)
+        diagnostics.append(PreviewDiagnostic(severity: severity,
+                                             key: key,
+                                             params: params,
+                                             file: fileName,
+                                             line: line,
+                                             api: api))
     }
 
     // MARK: Struct instantiation
@@ -118,7 +171,7 @@ final class PreviewEvaluator {
         depth += 1
         defer { depth -= 1 }
         guard depth < 40 else {
-            throw PreviewError(message: "View nesting too deep (recursive view?).")
+            throw PreviewError(.errRecursionDeep)
         }
 
         var env = Env(typeName: viewStruct.name)
@@ -137,7 +190,13 @@ final class PreviewEvaluator {
         }
 
         guard let body = viewStruct.bodyStatements else {
-            throw PreviewError(message: "\(viewStruct.name) has no body to preview.")
+            throw PreviewError(.errNoBody, viewStruct.name)
+        }
+        // §七: external dependencies need Mock data to preview.
+        for req in viewStruct.mockRequirements {
+            if mockStore?.value(for: req.propertyName) == nil {
+                diagnose(.error, .diagMockNeeded, params: [req.propertyName])
+            }
         }
         let children = try viewBuilderChildren(body, env: env)
         if children.count == 1 { return children[0] }
@@ -153,7 +212,7 @@ final class PreviewEvaluator {
             switch item.item {
             case .decl(let decl):
                 guard let variable = decl.as(VariableDeclSyntax.self) else {
-                    warn("Declarations inside body aren't supported: \(snippet(decl))")
+                    diagnose(.warning, .diagDeclInBody, params: [snippet(decl)], node: decl)
                     continue
                 }
                 for binding in variable.bindings {
@@ -186,7 +245,7 @@ final class PreviewEvaluator {
         case .color(let color): return [PreviewViewNode(kind: .colorView(color))]
         case .void: return []
         default:
-            warn("Expression isn't a view: \(snippet(expr))")
+            diagnose(.warning, .diagExprNotView, params: [snippet(expr)], node: expr)
             return []
         }
     }
@@ -194,7 +253,7 @@ final class PreviewEvaluator {
     private func evalIf(_ ifExpr: IfExprSyntax, env: Env) throws -> [PreviewViewNode] {
         guard let firstCondition = ifExpr.conditions.first,
               case .expression(let condition) = firstCondition.condition else {
-            warn("`if let` / `if case` aren't supported in previews yet.")
+            diagnose(.warning, .diagIfLet, node: ifExpr)
             return []
         }
         let isTrue = (try eval(condition, env: env)).boolValue ?? false
@@ -260,7 +319,7 @@ final class PreviewEvaluator {
             if nodes.count == 1 { return .view(nodes[0]) }
             return .view(PreviewViewNode(kind: .group(nodes)))
         }
-        warn("Expression not supported: \(snippet(expr))")
+        diagnose(.warning, .diagExprUnsupported, params: [snippet(expr)], node: expr)
         return .void
     }
 
@@ -268,15 +327,19 @@ final class PreviewEvaluator {
         if name.hasPrefix("$") {
             let property = String(name.dropFirst())
             if let key = env.stateKeys[property] { return .binding(key) }
-            warn("$\(property) isn't a @State property.")
+            diagnose(.warning, .diagNotState, params: [property])
             return .void
         }
         if let local = env.locals[name] { return local }
         if let key = env.stateKeys[name] { return runtime.value(key) ?? .void }
-        if let computed = doc.views[env.typeName]?.computedViews[name] {
+        if let computed = activeViews[env.typeName]?.computedViews[name] {
             return try invokeComputedView(computed, env: env)
         }
-        warn("Unknown identifier '\(name)'.")
+        // §六 Design token fallback: `let brand = Color(...)` / `V32.gap`.
+        if let token = projectIndex?.tokensByName[name] { return token.value }
+        // §七 Mock fallback before giving up.
+        if let mock = mockStore?.value(for: name) { return mock }
+        diagnose(.error, .diagUnknownIdentifier, params: [name], api: name, node: nil)
         return .void
     }
 
@@ -287,7 +350,7 @@ final class PreviewEvaluator {
         depth += 1
         defer { depth -= 1 }
         guard depth < 40 else {
-            throw PreviewError(message: "View nesting too deep (recursive view?).")
+            throw PreviewError(.errRecursionDeep)
         }
         guard let statements = computed.bodyStatements else { return .void }
         let children = try viewBuilderChildren(statements, env: env)
@@ -312,6 +375,11 @@ final class PreviewEvaluator {
             default:
                 break
             }
+            // §六/§七 qualified lookup: `V32Layout.sectionGap` may be a design
+            // token or a mock value when the base type is otherwise unknown.
+            let qualified = "\(reference.baseName.text).\(name)"
+            if let token = projectIndex?.tokensByName[qualified] { return token.value }
+            if let mock = mockStore?.value(for: qualified) { return mock }
         }
 
         let baseValue = try eval(base, env: env)
@@ -323,7 +391,7 @@ final class PreviewEvaluator {
         case (.color(let c), "gradient"): return .color(c)   // close enough for a preview
         case (.member, _): return .member(name)
         default:
-            warn("Member '.\(name)' not supported here.")
+            diagnose(.warning, .diagMemberUnsupported, params: [name], api: name, node: member)
             return .void
         }
     }
@@ -362,7 +430,7 @@ final class PreviewEvaluator {
         case "..<": return .range(Int(lhs.doubleValue ?? 0), Int(rhs.doubleValue ?? 0), inclusive: false)
         case "...": return .range(Int(lhs.doubleValue ?? 0), Int(rhs.doubleValue ?? 0), inclusive: true)
         default:
-            warn("Operator '\(op)' not supported.")
+            diagnose(.warning, .diagOperatorUnsupported, params: [op], api: op, node: infix)
             return .void
         }
     }
@@ -427,7 +495,7 @@ final class PreviewEvaluator {
             guard ["=", "+=", "-=", "*=", "/="].contains(op),
                   let lhs = infix.leftOperand.as(DeclReferenceExprSyntax.self),
                   let key = env.stateKeys[lhs.baseName.text] else {
-                warn("Action not supported: \(snippet(expr))")
+                diagnose(.warning, .diagActionUnsupported, params: [snippet(expr)], node: expr)
                 return
             }
             let rhs = (try? eval(infix.rightOperand, env: env)) ?? .number(0)
@@ -468,7 +536,7 @@ final class PreviewEvaluator {
             }
         }
 
-        warn("Action not supported: \(snippet(expr))")
+        diagnose(.warning, .diagActionUnsupported, params: [snippet(expr)], node: expr)
     }
 
     private func snippet(_ node: some SyntaxProtocol) -> String {

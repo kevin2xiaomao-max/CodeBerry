@@ -5,7 +5,19 @@ import SwiftSyntax
 /// and view modifiers.
 extension PreviewEvaluator {
 
+    /// §三 Wrapper: every view-producing call gets source info attached, so the
+    /// Inspector can tap-to-select and map overrides back to code ranges.
     func evalCall(_ call: FunctionCallExprSyntax, env: Env) throws -> PreviewValue {
+        let value = try evalCallInner(call, env: env)
+        if case .view(var node) = value, node.source == nil,
+           let info = sourceInfo(for: ExprSyntax(call)) {
+            node.source = info
+            return .view(node)
+        }
+        return value
+    }
+
+    private func evalCallInner(_ call: FunctionCallExprSyntax, env: Env) throws -> PreviewValue {
         let args = call.arguments.map { (label: $0.label?.text, expr: $0.expression) }
 
         if let reference = call.calledExpression.as(DeclReferenceExprSyntax.self) {
@@ -16,7 +28,7 @@ extension PreviewEvaluator {
             guard let base = member.base else {
                 // Bare-member call like `.system(size: 17)` — let contexts
                 // (fontValue etc.) handle these; standalone it's unsupported.
-                warn("Call '.\(name)(…)' not supported here.")
+                diagnose(.warning, .diagCallUnsupported, params: [name], api: name, node: member)
                 return .void
             }
             if let baseRef = base.as(DeclReferenceExprSyntax.self), baseRef.baseName.text == "Font" {
@@ -52,10 +64,10 @@ extension PreviewEvaluator {
                 default: break
                 }
             }
-            warn("Method '.\(name)(…)' not supported.")
+            diagnose(.warning, .diagMethodUnsupported, params: [name], api: name, node: call)
             return .void
         }
-        warn("Call not supported: \(call.calledExpression.trimmedDescription)")
+        diagnose(.warning, .diagCallUnsupported, params: [call.calledExpression.trimmedDescription], node: call)
         return .void
     }
 
@@ -162,13 +174,13 @@ extension PreviewEvaluator {
             return .number(value.doubleValue ?? 0)
 
         default:
-            if let function = doc.views[env.typeName]?.functions[name] {
+            if let function = activeViews[env.typeName]?.functions[name] {
                 return try invokeFunction(function, args: args, env: env)
             }
-            if let viewStruct = doc.views[name] {
+            if let viewStruct = activeViews[name] {
                 return .view(try instantiate(name: name, viewStruct: viewStruct, args: args, env: env))
             }
-            warn("'\(name)' isn't supported by the preview yet.")
+            diagnose(.warning, .diagFactoryUnsupported, params: [name], api: name, node: call)
             return .view(PreviewViewNode(kind: .unsupported(name)))
         }
     }
@@ -183,7 +195,7 @@ extension PreviewEvaluator {
         depth += 1
         defer { depth -= 1 }
         guard depth < 40 else {
-            throw PreviewError(message: "View nesting too deep (recursive view?).")
+            throw PreviewError(.errRecursionDeep)
         }
         var childEnv = env
         var consumed = Set<Int>()
@@ -265,7 +277,7 @@ extension PreviewEvaluator {
                              env: Env) throws -> PreviewViewNode {
         guard let dataArg = args.first(where: { $0.label == nil }),
               let closure = call.trailingClosure else {
-            warn("ForEach needs a range/array and a trailing closure.")
+            diagnose(.warning, .diagForEachNeedsClosure, node: call)
             return PreviewViewNode(kind: .unsupported("ForEach"))
         }
         let data = try eval(dataArg.expr, env: env)
@@ -278,7 +290,7 @@ extension PreviewEvaluator {
         case .array(let items):
             elements = Array(items.prefix(200))
         default:
-            warn("ForEach data must be a range or array literal.")
+            diagnose(.warning, .diagForEachData, node: call)
             return PreviewViewNode(kind: .unsupported("ForEach"))
         }
 
@@ -368,6 +380,12 @@ extension PreviewEvaluator {
                 } else {
                     node.modifiers.append(.background(color))
                 }
+            } else if let firstExpr,
+                      case .view(let shapeNode) = try eval(firstExpr, env: env),
+                      let (kind, color) = Self.filledShape(of: shapeNode) {
+                // `.background(RoundedRectangle(...).fill(color))`: the fill
+                // is recorded as `.foreground` on the shape node.
+                node.modifiers.append(.backgroundShape(color, kind))
             }
         case "overlay":
             var children: [PreviewViewNode] = []
@@ -434,7 +452,7 @@ extension PreviewEvaluator {
             }
         default:
             if !Self.cosmeticModifiers.contains(name) {
-                warn("Modifier '.\(name)' not supported (ignored).")
+                diagnose(.ignored, .diagModifierIgnored, params: [name], api: name, node: call)
             }
         }
     }
@@ -451,6 +469,16 @@ extension PreviewEvaluator {
     func memberName(_ expr: ExprSyntax?) -> String? {
         guard let member = expr?.as(MemberAccessExprSyntax.self), member.base == nil else { return nil }
         return member.declName.baseName.text
+    }
+
+    /// A shape node carrying a fill color (`.fill(...)` is recorded as
+    /// `.foreground` on the shape) — for `.background(Shape().fill(color))`.
+    static func filledShape(of node: PreviewViewNode) -> (PreviewShapeKind, Color)? {
+        guard case .shape(let kind) = node.kind else { return nil }
+        for mod in node.modifiers {
+            if case .foreground(let color) = mod { return (kind, color) }
+        }
+        return nil
     }
 
     func colorValue(from expr: ExprSyntax?, env: Env) throws -> Color? {

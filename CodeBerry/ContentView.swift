@@ -5,6 +5,7 @@ import SwiftUI
 struct ContentView: View {
     @Bindable var store: WorkspaceStore
     @State private var showSettings = false
+    @Bindable private var l10n = L10nService.shared
 
     var body: some View {
         // The project screen is a NavigationSplitView, which can't be pushed
@@ -33,10 +34,10 @@ struct ContentView: View {
         .sheet(isPresented: $showSettings) {
             SettingsView()
         }
-        .alert("Workspace Error",
+        .alert(l10n.t(.workspaceError),
                isPresented: Binding(get: { store.lastError != nil },
                                     set: { if !$0 { store.lastError = nil } })) {
-            Button("OK", role: .cancel) {}
+            Button(l10n.t(.ok), role: .cancel) {}
         } message: {
             Text(store.lastError ?? "")
         }

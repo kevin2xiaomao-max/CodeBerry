@@ -27,14 +27,14 @@ struct EditorPaneView: View {
                             HStack(spacing: 0) {
                                 editor(path)
                                 Divider()
-                                canvas(axis: .horizontal, total: geometry.size.width)
+                                canvas(axis: .horizontal, total: geometry.size.width, path: path)
                                     .frame(width: geometry.size.width * previewFraction)
                             }
                         } else {
                             VStack(spacing: 0) {
                                 editor(path)
                                 Divider()
-                                canvas(axis: .vertical, total: geometry.size.height)
+                                canvas(axis: .vertical, total: geometry.size.height, path: path)
                                     .frame(height: geometry.size.height * previewFraction)
                             }
                         }
@@ -58,14 +58,14 @@ struct EditorPaneView: View {
             }
         } else {
             ContentUnavailableView {
-                Label("No File Open", systemImage: "swift")
+                Label(L10nService.shared.t(.noFileOpen), systemImage: "swift")
             } description: {
-                Text("Select a file in the navigator, or open the agent chat and ask it to create one.")
+                Text(L10nService.shared.t(.noFileOpenDesc))
             }
         }
     }
 
-    private func canvas(axis: Axis, total: CGFloat) -> some View {
+    private func canvas(axis: Axis, total: CGFloat, path: String) -> some View {
         PreviewCanvasView(source: store.editorText,
                           dividerAxis: axis,
                           onDividerDrag: { translation in
@@ -75,7 +75,12 @@ struct EditorPaneView: View {
                               let proposed = base - Double(translation) / Double(total)
                               previewFraction = min(0.8, max(0.2, proposed))
                           },
-                          onDividerDragEnded: { dragBaseFraction = nil })
+                          onDividerDragEnded: { dragBaseFraction = nil },
+                          filePath: path,
+                          projectRoot: store.previewProjectRoot(),
+                          projectName: store.currentProject,
+                          readFile: { store.previewFileContent($0) },
+                          store: store)
     }
 
     private func editor(_ path: String) -> some View {
