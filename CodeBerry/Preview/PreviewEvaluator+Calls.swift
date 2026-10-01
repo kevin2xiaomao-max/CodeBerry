@@ -174,6 +174,11 @@ extension PreviewEvaluator {
             return .number(value.doubleValue ?? 0)
 
         default:
+            // 4.0.2 P0-2: cross-file component resolution order —
+            //   1. current file (`doc`, wins via `activeViews` merge),
+            //   2. project index (`PreviewProjectIndex`, unified 1000-file cap),
+            //   3. registered custom components (`ViewRegistry`),
+            //   4. `.unsupported` placeholder (never a throw, never silent).
             if let function = activeViews[env.typeName]?.functions[name] {
                 return try invokeFunction(function, args: args, env: env)
             }
