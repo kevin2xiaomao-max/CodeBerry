@@ -7,6 +7,10 @@ import XCTest
 /// Regression context: in the real XiaoZhangGui project (233 Swift files)
 /// the old 100-file preview-index cap left V35/V36 components unindexed, so
 /// `HomeView` rendered them as `[?]` placeholders.
+///
+/// 4.0.2: @MainActor — the tests drive `rebuildInBackground`, which is
+/// MainActor-isolated (it snapshots MainActor-isolated store state).
+@MainActor
 final class PreviewLargeProjectIndexTests: XCTestCase {
 
     /// Builds a temp project with `fileCount` tiny Swift files; the last one
