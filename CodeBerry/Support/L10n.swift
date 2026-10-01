@@ -329,6 +329,24 @@ enum L10nKey: String, CaseIterable {
     case compatibility         // 兼容性
     case hideReadiness         // 不再提示
     case reorderUnsafeNote       // 该 modifier 不支持安全重排（可能改变渲染结果）
+    case conflictKeepLocal  // 保留本地
+    case conflictUseRemote  // 使用远端
+    case conflictManualMerge  // 手动合并
+    case conflictsTitle  // 冲突
+    case conflictBothModified  // 本地和远端都修改了此文件
+    case conflictDeleteVsModify  // 一端删除、另一端修改了此文件
+    case historyTitle  // 本地历史
+    case historyEmpty  // 暂无历史版本
+    case historyRestore  // 恢复
+    case bytesUnit  // 字节
+    case changesTab  // 更改
+    case localChangesTitle  // 本地更改
+    case noLocalChanges  // 没有本地更改
+    case changeAdded  // 新增
+    case changeModified  // 已修改
+    case changeDeleted  // 已删除
+    case syncNow  // 立即同步
+    case offlineMessage  // 离线 — 同步与下载已暂停
 }
 
 /// Central localization service. Views read `L10nService.shared.t(.key)`;
@@ -672,5 +690,23 @@ final class L10nService: @unchecked Sendable {
         .compatibility: ("兼容性", "Compatibility"),
         .hideReadiness: ("不再提示", "Don't show again"),
         .reorderUnsafeNote: ("该 modifier 不支持安全重排（可能改变渲染结果）", "This modifier cannot be safely reordered (may change rendering)"),
+        .conflictKeepLocal: ("保留本地", "Keep Local"),
+        .conflictUseRemote: ("使用远端", "Use Remote"),
+        .conflictManualMerge: ("手动合并", "Manual Merge"),
+        .conflictsTitle: ("冲突", "Conflicts"),
+        .conflictBothModified: ("本地和远端都修改了此文件", "Modified both locally and remotely"),
+        .conflictDeleteVsModify: ("一端删除、另一端修改了此文件", "Deleted on one side, modified on the other"),
+        .historyTitle: ("本地历史", "Local History"),
+        .historyEmpty: ("暂无历史版本", "No revisions yet"),
+        .historyRestore: ("恢复", "Restore"),
+        .bytesUnit: ("字节", "bytes"),
+        .changesTab: ("更改", "Changes"),
+        .localChangesTitle: ("本地更改", "Local Changes"),
+        .noLocalChanges: ("没有本地更改", "No local changes"),
+        .changeAdded: ("新增", "Added"),
+        .changeModified: ("已修改", "Modified"),
+        .changeDeleted: ("已删除", "Deleted"),
+        .syncNow: ("立即同步", "Sync Now"),
+        .offlineMessage: ("离线 — 同步与下载已暂停", "Offline — sync and download paused"),
     ]
 }

@@ -27,6 +27,8 @@ struct EditorPaneView: View {
     @State private var showingDiagnostics = false
     @State private var showingProjectSearch = false
     @State private var showingReferences = false
+    // MARK: - M4: Local history
+    @State private var showingHistory = false
     // MARK: - M3: Code -> Preview locate
     @State private var locateLine: Int?
     @State private var locateToken: UUID?
@@ -104,7 +106,15 @@ struct EditorPaneView: View {
                     onClose: { showingQuickOpen = false }
                 )
             }
-            .sheet(isPresented: $showingDiagnostics) {
+            .sheet(isPresented: $showingHistory) {
+            if let path = store.openFilePath {
+                LocalHistoryView(path: path, store: LocalHistoryStore.shared) { entry in
+                    store.editorText = entry.content
+                    showingHistory = false
+                }
+            }
+        }
+        .sheet(isPresented: $showingDiagnostics) {
                 DiagnosticsListView(
                     diagnostics: diagnostics,
                     onSelect: { diag in
@@ -336,6 +346,13 @@ struct EditorPaneView: View {
                 Image(systemName: "arrow.up.right.circle")
             }
             .padding(.horizontal, 8)
+            Button {
+                showingHistory = true
+            } label: {
+                Image(systemName: "clock.arrow.circlepath")
+            }
+            .padding(.horizontal, 8)
+            .disabled(store.openFilePath == nil)
             Button {
                 locateLine = controller.caretLine()
                 locateToken = UUID()

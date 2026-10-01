@@ -123,6 +123,7 @@ final class WorkspaceStore {
     }
 
     func closeProject() {
+        saveSession()
         saveNowIfDirty()
         clearEditorState()
         currentProject = nil
@@ -221,6 +222,22 @@ final class WorkspaceStore {
 
     // MARK: - Open / close / save
 
+    // MARK: - M4: Session restore
+
+    /// Persists the current session (project, open file, cursor lines).
+    func saveSession(selectedTab: Int = 0) {
+        // Cursor lines are recorded by the editor (M5 wires per-file tracking).
+        let session = WorkspaceSession(
+            projectFolder: currentProject,
+            openFilePath: openFilePath,
+            cursorLines: [:],
+            selectedTab: selectedTab)
+        SessionStore.save(session)
+    }
+
+    /// Returns the persisted session for restore-on-launch (M5 wires the UI).
+    func loadSession() -> WorkspaceSession { SessionStore.load() }
+
     func openFile(_ path: String) {
         guard path != openFilePath else { return }
         guard !isDirectory(path) else { return }
@@ -267,6 +284,8 @@ final class WorkspaceStore {
         do {
             try workspace.write(path, content: editorText)
             isDirty = false
+            // M4: record a local-history revision on every successful save.
+            LocalHistoryStore.shared.record(path: path, content: editorText)
             if path.hasSuffix(".swift"), let rel = projectRelativePath(of: path) {
                 symbolIndex.updateFile(relativePath: rel, content: editorText)
             }

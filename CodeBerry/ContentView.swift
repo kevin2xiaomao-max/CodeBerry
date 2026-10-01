@@ -34,6 +34,9 @@ struct ContentView: View {
         .sheet(isPresented: $showSettings) {
             SettingsView()
         }
+        .overlay(alignment: .top) {
+            OfflineBanner()
+        }
         .alert(l10n.t(.workspaceError),
                isPresented: Binding(get: { store.lastError != nil },
                                     set: { if !$0 { store.lastError = nil } })) {
