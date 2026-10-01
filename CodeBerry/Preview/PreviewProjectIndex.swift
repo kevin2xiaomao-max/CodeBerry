@@ -332,13 +332,18 @@ final class PreviewProjectIndex {
         // 4.0.3 S10: a production-vs-generated collision gets the specific
         // diagGeneratedShadowed instead of the generic conflict warning.
         var diags: [PreviewDiagnostic] = []
+        var reported: Set<String> = []
         for name in viewSources.keys.sorted() {
             let sources = viewSources[name] ?? []
             if sources.count > 1 {
                 diags.append(Self.collisionDiagnostic(name: name, sources: sources))
+                reported.insert(name)
             }
         }
         for name in typeSources.keys.sorted() {
+            // A View struct is one symbol: don't double-count a collision
+            // already reported via viewSources.
+            guard !reported.contains(name) else { continue }
             let sources = typeSources[name] ?? []
             if sources.count > 1 {
                 diags.append(Self.collisionDiagnostic(name: name, sources: sources))

@@ -178,7 +178,9 @@ final class PreviewLargeProjectIndexTests: XCTestCase {
         let evaluator = PreviewEvaluator(doc: doc, runtime: PreviewRuntime())
         evaluator.converter = parsed.converter
         evaluator.projectIndex = index
-        let nodes = try evaluator.renderRoot()
+        // 4.0.3 S8 (P0-F): explicit target — the source declares two views
+        // (TargetCard, Home); ambiguous selection must never be silent.
+        let nodes = try evaluator.renderRoot(targetView: "Home")
 
         var texts: [String] = []
         func walk(_ nodes: [PreviewViewNode]) {

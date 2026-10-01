@@ -44,7 +44,10 @@ indirect enum PreviewValue {
         case .array(let a): return "[" + a.map(\.display).joined(separator: ", ") + "]"
         case .member(let m): return "." + m
         case .typeStub(let t): return t
-        case .system(let t): return t
+        case .system(let t):
+            // A UUID stub's string form is its deterministic placeholder.
+            if t == "UUID" { return PreviewSystemRegistry.fixedUUIDString() }
+            return t
         default: return ""
         }
     }
@@ -534,15 +537,16 @@ final class PreviewEvaluator {
                     let value = try returnStmt.expression.map { try eval($0, env: env) } ?? .void
                     return (value, true)
                 }
-            case .expr(let expr):
-                if let ifExpr = expr.as(IfExprSyntax.self) {
-                    // `if` in a getter body parses as an if-expression.
+                // `if` in statement position parses as an ExpressionStmt
+                // wrapping an IfExprSyntax (statement/expression unification).
+                if let exprStmt = stmt.as(ExpressionStmtSyntax.self),
+                   let ifExpr = exprStmt.expression.as(IfExprSyntax.self) {
                     let (value, didReturn) = try evalGetterIf(ifExpr, env: &env)
                     if didReturn { return (value, true) }
                     last = value
-                } else {
-                    last = try eval(expr, env: env)
                 }
+            case .expr(let expr):
+                last = try eval(expr, env: env)
             @unknown default:
                 break
             }

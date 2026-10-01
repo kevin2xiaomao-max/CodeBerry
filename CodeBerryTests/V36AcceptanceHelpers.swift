@@ -64,7 +64,10 @@ enum V36Acceptance {
             cache: &cache,
             runtime: PreviewRuntime(),
             projectIndex: index,
-            mockStore: nil)
+            mockStore: nil,
+            // 4.0.3 S8 (P0-F): the target view is always explicit —
+            // never rely on ambiguous selection.
+            targetView: viewName)
         return (result.nodes, result.evaluator)
     }
 }

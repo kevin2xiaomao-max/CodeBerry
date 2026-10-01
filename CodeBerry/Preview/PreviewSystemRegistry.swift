@@ -46,7 +46,9 @@ enum PreviewSystemRegistry {
         case "Date":
             return (.string(currentDateString()), "当前时间")
         case "UUID":
-            return (.string(fixedUUIDString()), "固定占位 UUID")
+            // A UUID stub (not a string): `.uuidString` resolves through
+            // the registry's member table to the fixed placeholder.
+            return (.system("UUID"), "固定占位 UUID")
         case "URL":
             if let s = args.first(where: { $0.label == "string" })?.value.display,
                !s.isEmpty {

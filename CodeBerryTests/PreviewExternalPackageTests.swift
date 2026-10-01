@@ -5,7 +5,7 @@ import XCTest
 /// must never block the rest of the page.
 final class PreviewExternalPackageTests: XCTestCase {
 
-    private func render(_ source: String) throws -> (texts: [String],
+    private func render(_ source: String, targetView: String? = nil) throws -> (texts: [String],
                                                     externals: [(package: String, symbol: String)],
                                                     unsupported: [String],
                                                     evaluator: PreviewEvaluator) {
@@ -15,7 +15,9 @@ final class PreviewExternalPackageTests: XCTestCase {
         PreviewEngine.collect(into: &doc, from: parsed.file)
         let evaluator = PreviewEvaluator(doc: doc, runtime: PreviewRuntime())
         evaluator.converter = parsed.converter
-        let nodes = try evaluator.renderRoot()
+        // 4.0.3 S8 (P0-F): the target view is explicit; multi-view sources
+        // never silently render viewOrder.first.
+        let nodes = try evaluator.renderRoot(targetView: targetView)
 
         var texts: [String] = []
         var externals: [(String, String)] = []
@@ -84,6 +86,7 @@ final class PreviewExternalPackageTests: XCTestCase {
     func testProjectDefinedViewWinsOverExternalMapping() throws {
         // A project that defines its own `Chart` view keeps it — the
         // external mapping must not shadow user code.
+        // 4.0.3 S8: explicit target (the source declares two views).
         let (texts, externals, _, _) = try render("""
         import SwiftUI
         struct Chart: View {
@@ -92,7 +95,7 @@ final class PreviewExternalPackageTests: XCTestCase {
         struct Home: View {
             var body: some View { Chart() }
         }
-        """)
+        """, targetView: "Home")
         XCTAssertTrue(externals.isEmpty)
         XCTAssertTrue(texts.contains("my-chart"))
     }
