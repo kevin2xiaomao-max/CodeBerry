@@ -42,7 +42,7 @@ final class PreviewBuiltinComponentsTests: XCTestCase {
         walk(nodes)
         XCTAssertFalse(sawUnsupported, "no [?] for built-ins in: \(body)")
         let errors = evaluator.diagnostics.filter { $0.severity == .error }
-        XCTAssertTrue(errors.isEmpty, "no errors in: \(body), got: \(errors.map(\\.message))")
+        XCTAssertTrue(errors.isEmpty, "no errors in: \(body), got: \(errors.map(\.message))")
         return (texts, evaluator)
     }
 
@@ -92,12 +92,12 @@ final class PreviewBuiltinComponentsTests: XCTestCase {
     }
 
     func testAnyViewPassesThrough() throws {
-        let (texts, _) = try render(""" AnyView(Text("wrapped")) """)
+        let (texts, _) = try render(" AnyView(Text(\"wrapped\")) ")
         XCTAssertTrue(texts.contains("wrapped"))
     }
 
     func testEmptyViewRendersNothing() throws {
-        let (texts, _) = try render(""" EmptyView() """)
+        let (texts, _) = try render(" EmptyView() ")
         XCTAssertTrue(texts.isEmpty)
     }
 
@@ -119,7 +119,7 @@ final class PreviewBuiltinComponentsTests: XCTestCase {
     }
 
     func testFormRendersAsList() throws {
-        let (texts, _) = try render(""" Form { Text("field") } """)
+        let (texts, _) = try render(" Form { Text(\"field\") } ")
         XCTAssertTrue(texts.contains("field"))
     }
 

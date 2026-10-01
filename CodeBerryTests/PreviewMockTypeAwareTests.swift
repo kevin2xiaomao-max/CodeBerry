@@ -163,6 +163,6 @@ final class PreviewMockTypeAwareTests: XCTestCase {
 
         let mockErrors = evaluator.diagnostics.filter { $0.key == .diagMockNeeded }
         XCTAssertTrue(mockErrors.isEmpty,
-                      "auto-resolved requirements must not error, got: \(mockErrors.map(\\.message))")
+                      "auto-resolved requirements must not error, got: \(mockErrors.map(\.message))")
     }
 }

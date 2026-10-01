@@ -112,10 +112,10 @@ final class PreviewCrossFileTypeResolutionTests: XCTestCase {
                       "static let shared must be recognized as a singleton")
         let errors = evaluator.diagnostics.filter { $0.severity == .error }
         XCTAssertTrue(errors.isEmpty,
-                      "DemoMode must not produce errors, got: \(errors.map(\\.message))")
+                      "DemoMode must not produce errors, got: \(errors.map(\.message))")
         let infos = evaluator.diagnostics.filter { $0.severity == .info }
         XCTAssertTrue(infos.contains { $0.key == .diagTypePreviewDefault },
-                      "an Info note '使用预览默认值' is expected, got: \(evaluator.diagnostics.map(\\.message))")
+                      "an Info note '使用预览默认值' is expected, got: \(evaluator.diagnostics.map(\.message))")
         XCTAssertTrue(texts(in: nodes).contains("real"),
                       "isEnabled defaults to false → the false branch renders")
     }
@@ -151,7 +151,7 @@ final class PreviewCrossFileTypeResolutionTests: XCTestCase {
         let (_, evaluator, _) = try renderHome(home, mode: true)
         let errors = evaluator.diagnostics.filter { $0.severity == .error }
         XCTAssertTrue(errors.isEmpty,
-                      "Mode.demo must not error, got: \(errors.map(\\.message))")
+                      "Mode.demo must not error, got: \(errors.map(\.message))")
     }
 
     // MARK: - genuinely unknown identifiers still error
