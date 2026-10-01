@@ -178,10 +178,10 @@ final class PreviewEngineTests: XCTestCase {
         }
         """
         let (nodes, _) = try render(source)
-        let overlays = allNodes(nodes).flatMap { node in
-            node.modifiers.compactMap { mod -> [PreviewViewNode]? in
+        let overlays: [PreviewViewNode] = allNodes(nodes).flatMap { node in
+            node.modifiers.flatMap { mod -> [PreviewViewNode] in
                 if case .overlay(let c) = mod { return c }
-                return nil
+                return []
             }
         }
         let texts = allNodes(overlays).compactMap { node -> String? in
