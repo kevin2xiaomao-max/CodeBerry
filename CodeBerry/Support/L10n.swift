@@ -166,6 +166,10 @@ enum L10nKey: String, CaseIterable {
     case mockKey
     case mockValue
     case mockEmpty
+    case mockQueryFill          // @Query 数组填充方式
+    case mockQueryEmpty         // 空
+    case mockQuerySample        // 示例
+    case mockQueryCount         // 数量
 
     // MARK: Fixture generation
     case generateFixture
@@ -548,6 +552,10 @@ final class L10nService: @unchecked Sendable {
         .mockKey: ("键", "Key"),
         .mockValue: ("值", "Value"),
         .mockEmpty: ("还没有预览数据", "No preview data yet"),
+        .mockQueryFill: ("@Query 数组填充", "@Query array fill"),
+        .mockQueryEmpty: ("空", "Empty"),
+        .mockQuerySample: ("示例", "Sample"),
+        .mockQueryCount: ("数量", "Count"),
         // Fixture generation
         .generateFixture: ("生成预览夹具", "Generate Preview Fixture"),
         .fixtureGenerated: ("已生成 %@", "Generated %@"),

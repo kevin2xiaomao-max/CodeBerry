@@ -59,6 +59,17 @@ struct PreviewFunction {
 struct PreviewMockRequirement {
     let propertyName: String
     let typeName: String
+    /// 4.0.2 P0-6: where the requirement came from — drives type-aware
+    /// mock defaults (reduceMotion, modelContext, @Query arrays, …).
+    let kind: Kind
+    enum Kind: String, Sendable {
+        case environment
+        case query
+        case environmentObject
+        case stateObject
+        case observedObject
+        case dependency
+    }
 }
 
 struct PreviewViewStruct {
@@ -323,10 +334,24 @@ struct PreviewEngine {
                 }
                 let typeName = binding.typeAnnotation?.type.trimmedDescription ?? ""
                 // §七: external dependencies need Mock data to preview.
-                if dependencyAttributes.contains(where: attrNames.contains)
-                    || dependencyTypes.contains(where: typeName.contains) {
+                if let matchedAttr = dependencyAttributes.first(where: attrNames.contains) {
+                    let kind: PreviewMockRequirement.Kind = switch matchedAttr {
+                    case "Environment": .environment
+                    case "Query": .query
+                    case "EnvironmentObject": .environmentObject
+                    case "StateObject": .stateObject
+                    case "ObservedObject": .observedObject
+                    default: .dependency
+                    }
                     mockRequirements.append(PreviewMockRequirement(propertyName: name,
-                                                                   typeName: typeName.isEmpty ? "?" : typeName))
+                                                                   typeName: typeName.isEmpty ? "?" : typeName,
+                                                                   kind: kind))
+                    continue
+                }
+                if dependencyTypes.contains(where: typeName.contains) {
+                    mockRequirements.append(PreviewMockRequirement(propertyName: name,
+                                                                   typeName: typeName.isEmpty ? "?" : typeName,
+                                                                   kind: .dependency))
                     continue
                 }
                 if name == "body", let accessorBlock = binding.accessorBlock {

@@ -461,9 +461,17 @@ struct PreviewCanvasView: View {
         // M3 §16: incremental — unchanged views reuse cached nodes.
         do {
             let engine = PreviewEngine(source: source)
-            guard engine.parseTree() != nil else {
+            guard let parsed = engine.parseTree() else {
                 throw PreviewError(.errPreviewPaused)
             }
+            // 4.0.2 P0-6: type-aware mock defaults — auto-resolve the
+            // requirements that never need hand-filling (reduceMotion,
+            // modelContext, @Query arrays, environment defaults) before
+            // evaluating. Explicit profile/fixture/user values always win.
+            var seedDoc = PreviewDocument()
+            PreviewEngine.collect(into: &seedDoc, from: parsed.file)
+            let seedReqs = seedDoc.viewOrder.flatMap { seedDoc.views[$0]?.mockRequirements ?? [] }
+            MockCenter.seedTypeAwareDefaults(requirements: seedReqs, into: mockStore)
             let result = IncrementalPreview.evaluate(
                 source: source,
                 fileName: (filePath as NSString?)?.lastPathComponent ?? "",

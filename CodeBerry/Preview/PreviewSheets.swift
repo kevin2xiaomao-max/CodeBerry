@@ -564,20 +564,27 @@ struct PreviewMockSheet: View {
                 if !requirements.isEmpty {
                     Section(l10n.t(.mockNeeded)) {
                         ForEach(requirements, id: \.propertyName) { req in
-                            HStack {
-                                VStack(alignment: .leading) {
-                                    Text(req.propertyName).font(.callout.monospaced())
-                                    Text(req.typeName).font(.caption).foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                if mockStore.value(for: req.propertyName) == nil {
-                                    Button(l10n.t(.mockAdd)) {
-                                        mockStore.acknowledge(key: req.propertyName)
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    VStack(alignment: .leading) {
+                                        Text(req.propertyName).font(.callout.monospaced())
+                                        Text(req.typeName).font(.caption).foregroundStyle(.secondary)
                                     }
-                                    .buttonStyle(.bordered)
-                                } else {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(.green)
+                                    Spacer()
+                                    if mockStore.value(for: req.propertyName) == nil {
+                                        Button(l10n.t(.mockAdd)) {
+                                            mockStore.acknowledge(key: req.propertyName)
+                                        }
+                                        .buttonStyle(.bordered)
+                                    } else {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundStyle(.green)
+                                    }
+                                }
+                                // 4.0.2 P0-6: @Query arrays offer
+                                // Empty / Sample / Count right in the row.
+                                if req.kind == .query {
+                                    QueryArrayFillPicker(req: req, mockStore: mockStore)
                                 }
                             }
                         }
@@ -625,6 +632,52 @@ struct PreviewMockSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(l10n.t(.done)) { onDone(); dismiss() }
                 }
+            }
+        }
+    }
+}
+
+// MARK: - 4.0.2 P0-6: @Query array fill picker
+
+/// Empty / Sample / Count selector for `@Query` array requirements,
+/// inline in the Mock sheet requirement row.
+private struct QueryArrayFillPicker: View {
+    let req: PreviewMockRequirement
+    @Bindable var mockStore: PreviewMockStore
+    @Bindable private var l10n = L10nService.shared
+
+    private var elementType: String {
+        MockCenter.arrayElementType(of: req.typeName) ?? "Item"
+    }
+
+    private var selection: (mode: MockValue.QueryArrayMode, count: Int) {
+        MockCenter.queryFillMode(in: mockStore, for: req.propertyName)
+    }
+
+    private func apply(mode: MockValue.QueryArrayMode, count: Int) {
+        mockStore.values[req.propertyName] = MockValue.queryArray(
+            elementType: elementType, mode: mode,
+            count: mode == .empty ? 0 : max(1, count)).previewValue()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Picker(l10n.t(.mockQueryFill), selection: Binding(
+                get: { selection.mode },
+                set: { apply(mode: $0, count: selection.count == 0 ? 3 : selection.count) }
+            )) {
+                Text(l10n.t(.mockQueryEmpty)).tag(MockValue.QueryArrayMode.empty)
+                Text(l10n.t(.mockQuerySample)).tag(MockValue.QueryArrayMode.sample)
+                Text(l10n.t(.mockQueryCount)).tag(MockValue.QueryArrayMode.count)
+            }
+            .pickerStyle(.segmented)
+            if selection.mode != .empty {
+                Stepper("\(l10n.t(.mockQueryCount)): \(selection.count)",
+                        value: Binding(
+                            get: { selection.count },
+                            set: { apply(mode: selection.mode, count: $0) }
+                        ), in: 1...50)
+                    .font(.caption)
             }
         }
     }
