@@ -10,33 +10,48 @@ struct FourTabView: View {
     @Bindable var store: WorkspaceStore
     @Bindable private var l10n = L10nService.shared
     @State private var selectedTab = 1  // default to Code
+    /// Opens the Settings sheet (owned by ContentView).
+    var onShowSettings: () -> Void = {}
 
     var body: some View {
         TabView(selection: $selectedTab) {
             // 文件
-            FileNavigatorView(store: store,
-                              onBackToProjects: { store.closeProject() })
-                .tabItem {
-                    Label(l10n.t(.filesTab), systemImage: "folder")
-                }
-                .tag(0)
+            NavigationStack {
+                FileNavigatorView(store: store,
+                                  onBackToProjects: { store.closeProject() })
+                    .workspaceTitleMenu(store: store, onShowSettings: onShowSettings)
+            }
+            .tabItem {
+                Label(l10n.t(.filesTab), systemImage: "folder")
+            }
+            .tag(0)
 
             // 代码
-            EditorPaneView(store: store, previewInitiallyVisible: false)
-                .tabItem {
-                    Label(l10n.t(.codeTab), systemImage: "chevron.left.forwardslash.chevron.right")
-                }
-                .tag(1)
+            NavigationStack {
+                EditorPaneView(store: store, previewInitiallyVisible: false)
+                    .navigationTitle(store.openFileName ?? store.currentProject ?? "CodeBerry")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .workspaceTitleMenu(store: store, onShowSettings: onShowSettings)
+            }
+            .tabItem {
+                Label(l10n.t(.codeTab), systemImage: "chevron.left.forwardslash.chevron.right")
+            }
+            .tag(1)
 
             // 预览
-            PreviewTabView(store: store)
-                .tabItem {
-                    Label(l10n.t(.previewTab), systemImage: "eye")
-                }
-                .tag(2)
+            NavigationStack {
+                PreviewTabView(store: store)
+                    .navigationTitle(l10n.t(.previewTab))
+                    .navigationBarTitleDisplayMode(.inline)
+                    .workspaceTitleMenu(store: store, onShowSettings: onShowSettings)
+            }
+            .tabItem {
+                Label(l10n.t(.previewTab), systemImage: "eye")
+            }
+            .tag(2)
 
             // 更改
-            ChangesTabContainer(store: store)
+            ChangesTabContainer(store: store, onShowSettings: onShowSettings)
                 .tabItem {
                     Label(l10n.t(.changesTab), systemImage: "arrow.triangle.branch")
                 }
@@ -55,6 +70,57 @@ struct FourTabView: View {
             guard let request = note.object as? CodeJumpRequest else { return }
             selectedTab = store.handleCodeJumpRequest(request)
         }
+    }
+}
+
+// MARK: - P0-1: unified workspace navigation menu
+
+/// Unified native workspace navigation (P0-1): every tab gets a
+/// `.toolbarTitleMenu` — Back to Projects, Switch Workspace…, Settings —
+/// so the user can always leave the workspace from any tab, even after a
+/// session restore. No fifth tab; the 4-tab bar is untouched.
+struct WorkspaceTitleMenu: ViewModifier {
+    @Bindable var store: WorkspaceStore
+    @Bindable private var l10n = L10nService.shared
+    var onShowSettings: () -> Void = {}
+
+    func body(content: Content) -> some View {
+        content.toolbarTitleMenu {
+            Button {
+                store.closeProject()
+            } label: {
+                Label(l10n.t(.backToProjects), systemImage: "folder")
+            }
+            .accessibilityIdentifier("workspace-menu-back")
+            Menu {
+                ForEach(store.projects) { project in
+                    Button {
+                        store.openProject(project.name)
+                    } label: {
+                        Label(project.name, systemImage: "folder.fill")
+                    }
+                    .disabled(project.name == store.currentProject)
+                }
+            } label: {
+                Label(l10n.t(.switchWorkspace), systemImage: "arrow.left.arrow.right")
+            }
+            .accessibilityIdentifier("workspace-menu-switch")
+            Button {
+                onShowSettings()
+            } label: {
+                Label(l10n.t(.settings), systemImage: "gear")
+            }
+            .accessibilityIdentifier("workspace-menu-settings")
+        }
+    }
+}
+
+extension View {
+    /// P0-1: workspace navigation title menu (Back to Projects / Switch
+    /// Workspace / Settings). Apply inside a tab's NavigationStack.
+    func workspaceTitleMenu(store: WorkspaceStore,
+                            onShowSettings: @escaping () -> Void = {}) -> some View {
+        modifier(WorkspaceTitleMenu(store: store, onShowSettings: onShowSettings))
     }
 }
 
@@ -100,6 +166,8 @@ struct PreviewTabView: View {
 struct ChangesTabContainer: View {
     @Bindable var store: WorkspaceStore
     @Bindable private var l10n = L10nService.shared
+    /// Opens the Settings sheet (owned by ContentView).
+    var onShowSettings: () -> Void = {}
     @State private var changes: [LocalChange] = []
     @State private var patchText: String?
     @State private var showingPatch = false
@@ -125,7 +193,9 @@ struct ChangesTabContainer: View {
             isSyncing: isSyncing || store.isSyncing,
             isGitHubProject: store.githubMetadata != nil,
             syncError: store.syncError,
-            syncNotice: store.syncNotice)
+            syncNotice: store.syncNotice,
+            store: store,
+            onShowSettings: onShowSettings)
         .sheet(isPresented: $showingPatch) {
             if let patchText {
                 NavigationStack {

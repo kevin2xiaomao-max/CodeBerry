@@ -55,7 +55,7 @@ struct ContentView: View {
     @ViewBuilder
     private var projectView: some View {
         if sizeClass == .compact {
-            FourTabView(store: store)
+            FourTabView(store: store, onShowSettings: { showSettings = true })
         } else {
             NavigationSplitView {
                 FileNavigatorView(store: store,

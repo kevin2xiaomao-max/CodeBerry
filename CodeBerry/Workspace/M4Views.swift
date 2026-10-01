@@ -94,6 +94,7 @@ struct LocalHistoryView: View {
 
 struct ChangesTabView: View {
     @Bindable private var l10n = L10nService.shared
+    @Bindable var store: WorkspaceStore
     let changes: [LocalChange]
     let conflicts: [GitHubSyncConflict]
     var onExportPatch: () -> Void = {}
@@ -106,6 +107,8 @@ struct ChangesTabView: View {
     var isGitHubProject: Bool = false
     var syncError: String? = nil
     var syncNotice: String? = nil
+    /// Opens the Settings sheet (owned by ContentView).
+    var onShowSettings: () -> Void = {}
 
     var body: some View {
         NavigationStack {
@@ -174,6 +177,10 @@ struct ChangesTabView: View {
                 }
             }
             .navigationTitle(l10n.t(.changesTab))
+            // P0-1: the unified workspace navigation menu lives inside the
+            // tab's own NavigationStack (toolbar modifiers on the stack
+            // itself would be ignored).
+            .workspaceTitleMenu(store: store, onShowSettings: onShowSettings)
         }
     }
 
