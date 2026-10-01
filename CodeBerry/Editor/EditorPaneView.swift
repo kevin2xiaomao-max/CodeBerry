@@ -339,10 +339,28 @@ struct EditorPaneView: View {
 
     private var tabBar: some View {
         HStack(spacing: 0) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 1) {
-                    ForEach(store.openTabs, id: \.self) { tab in
-                        tabItem(tab)
+            // 4.0.2 P1-10: the active tab is always scrolled into view —
+            // new tabs append at the end (off-screen), which used to leave
+            // a stale tab visible while the title had already switched.
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 1) {
+                        ForEach(store.openTabs, id: \.self) { tab in
+                            tabItem(tab)
+                                .id(tab)
+                        }
+                    }
+                }
+                .onAppear {
+                    if let path = store.openFilePath {
+                        proxy.scrollTo(path, anchor: .center)
+                    }
+                }
+                .onChange(of: store.openFilePath) { _, newPath in
+                    if let newPath {
+                        withAnimation(.snappy) {
+                            proxy.scrollTo(newPath, anchor: .center)
+                        }
                     }
                 }
             }

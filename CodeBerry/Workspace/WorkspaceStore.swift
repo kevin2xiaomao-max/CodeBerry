@@ -36,6 +36,13 @@ final class WorkspaceStore {
     var selectedPath: String?
     private(set) var openTabs: [String] = []
     private(set) var openFilePath: String?
+    /// 4.0.2 P1-10: the editor tab invariant — the active file always owns
+    /// a tab, so the tab bar highlight and the navigation title (both
+    /// derived from `openFilePath`) can't desync.
+    var tabInvariantHolds: Bool {
+        guard let openFilePath else { return true }
+        return openTabs.contains(openFilePath)
+    }
     /// Pending Preview → Code line jump (P1-1). Set when FourTabView handles
     /// `.codeBerryJumpToCode`; consumed by EditorPaneView.
     private(set) var pendingLineJump: Int?
@@ -293,7 +300,12 @@ final class WorkspaceStore {
     }
 
     func openFile(_ path: String) {
-        guard path != openFilePath else { return }
+        if path == openFilePath {
+            // 4.0.2 P1-10 self-heal: the active file must always own a tab,
+            // so the tab bar highlight can never desync from the title.
+            if !openTabs.contains(path) { openTabs.append(path) }
+            return
+        }
         guard !isDirectory(path) else { return }
         saveNowIfDirty()
         do {
